@@ -142,6 +142,16 @@ export const MODULES = [
   { id: 'saasControl', label: 'SaaS Control' },
   { id: 'salesDemo', label: 'Sales Demo' },
   { id: 'legalSecurity', label: 'Legal & Security' },
+  { id: 'pilotDeployment', label: 'Pilot Deployment' },
+  { id: 'hl7', label: 'HL7 Ready' },
+  { id: 'pacs', label: 'PACS/DICOM' },
+  { id: 'biometric', label: 'Biometric' },
+  { id: 'insurance_tpa', label: 'Insurance/TPA' },
+  { id: 'erp', label: 'ERP/Tally' },
+  { id: 'whatsapp_sms', label: 'WhatsApp/SMS' },
+  { id: 'abdm_abha', label: 'ABDM/ABHA' },
+  { id: 'two_factor_auth', label: '2FA Security' },
+  { id: 'audit_compliance', label: 'Audit Compliance' },
 ];
 
 export const DEFAULT_ENABLED_MODULES = MODULES.map((module) => module.id);
@@ -160,8 +170,10 @@ export const FEATURE_FLAGS = [
   { id: 'audit_compliance', label: 'Audit Compliance', description: 'Enable enterprise audit/compliance dashboards and reports.' },
 ];
 
+// In the working enterprise build every existing advanced module should be visible by default.
+// Hospitals can still disable individual modules from SaaS/Configuration controls.
 export const DEFAULT_FEATURE_FLAGS = FEATURE_FLAGS.reduce((acc, feature) => {
-  acc[feature.id] = feature.id === 'audit_compliance';
+  acc[feature.id] = true;
   return acc;
 }, {});
 
@@ -216,16 +228,16 @@ export const TAB_PERMISSIONS = {
 };
 
 export const TAB_MODULES = {
-  fhir: ['configuration'],
-  hl7: ['configuration'],
-  pacs: ['configuration'],
-  biometric: ['configuration'],
-  insurance_tpa: ['billing'],
-  erp: ['billing'],
-  whatsapp_sms: ['communications'],
-  abdm_abha: ['patients'],
-  two_factor_auth: ['auditSecurity'],
-  audit_compliance: ['auditSecurity'],
+  fhir: ['integration', 'configuration'],
+  hl7: ['hl7', 'configuration'],
+  pacs: ['pacs', 'configuration'],
+  biometric: ['biometric', 'configuration'],
+  insurance_tpa: ['insurance_tpa', 'billing'],
+  erp: ['erp', 'billing'],
+  whatsapp_sms: ['whatsapp_sms', 'communications'],
+  abdm_abha: ['abdm_abha', 'patients'],
+  two_factor_auth: ['two_factor_auth', 'auditSecurity'],
+  audit_compliance: ['audit_compliance', 'auditSecurity'],
   dashboard: ['dashboard'],
   commandCenter: ['commandCenter', 'dashboard'],
   patients: ['patients'],
@@ -252,7 +264,7 @@ export const TAB_MODULES = {
 
 // Platform-level tabs are controlled by permission only.
 // They must not be hidden by hospital module ON/OFF settings.
-export const PLATFORM_TABS = ['tenants', 'saasControl', 'salesDemo', 'legalSecurity', 'auditSecurity', 'configuration'];
+export const PLATFORM_TABS = ['tenants', 'saasControl', 'salesDemo', 'legalSecurity', 'auditSecurity', 'configuration', 'pilotDeployment'];
 
 export const TAB_FEATURES = {
   fhir: 'fhir',

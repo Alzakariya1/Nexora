@@ -20,7 +20,8 @@
     "fix-tenant-indexes": "node scripts/fix-tenant-indexes.js",
     "tenant:provision": "node scripts/provision-tenant-db.js",
     "tenant:migrate": "node scripts/migrate-shared-to-tenant.js",
-    "tenant:audit": "node scripts/tenant-isolation-audit.js"
+    "tenant:audit": "node scripts/tenant-isolation-audit.js",
+    "qa:v49": "node scripts/v49-module-audit.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
