@@ -42,3 +42,17 @@ export { default as LegalSecurityCenter } from './LegalSecurityCenter';
 export { default as PilotDeploymentCenter } from './PilotDeploymentCenter';
 
 export { default as AdvancedFeaturePage } from './AdvancedFeaturePage';
+
+export { default as HL7Ready } from './HL7Ready';
+export { default as PACSDicom } from './PACSDicom';
+export { default as Biometric } from './Biometric';
+export { default as ERPTally } from './ERPTally';
+export { default as ABDMABHA } from './ABDMABHA';
+export { default as TwoFactorSecurity } from './TwoFactorSecurity';
+export { default as AuditCompliance } from './AuditCompliance';
+
+export { default as FHIRAPIs } from './FHIRAPIs';
+
+export { default as WhatsAppSMS } from './WhatsAppSMS';
+
+export { default as EnterpriseFeatureWorkspace } from './EnterpriseFeatureWorkspace';

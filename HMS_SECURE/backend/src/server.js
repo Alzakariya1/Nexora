@@ -73,6 +73,7 @@ app.use("/api", require("./routes/emr.routes"));
 app.use("/api", require("./routes/audit-security.routes"));
 app.use("/api", require("./routes/compliance.routes"));
 app.use("/api", require("./routes/integration.routes"));
+app.use("/api", require("./routes/enterprise-features.routes"));
 app.use("/api", require("./routes/command-center.routes"));
 app.use("/api", require("./routes/operations.routes"));
 app.use("/api", require("./routes/configuration.routes"));

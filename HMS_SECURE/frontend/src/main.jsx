@@ -83,6 +83,15 @@ import {
   SalesDemoCenter,
   LegalSecurityCenter,
   AdvancedFeaturePage,
+  FHIRAPIs,
+  WhatsAppSMS,
+  HL7Ready,
+  PACSDicom,
+  Biometric,
+  ERPTally,
+  ABDMABHA,
+  TwoFactorSecurity,
+  AuditCompliance,
 PilotDeploymentCenter,
 } from "./pages";
 import { DEFAULT_ENABLED_MODULES, DEFAULT_FEATURE_FLAGS, filterTabsByPermissions, hasPermission, normalizeFeatureFlags } from "./utils";
@@ -1275,9 +1284,15 @@ function App() {
           }
         }}
       >
-            {["fhir", "hl7", "pacs", "biometric", "erp", "whatsapp_sms", "abdm_abha", "two_factor_auth", "audit_compliance"].includes(tab) && (
-              <AdvancedFeaturePage featureKey={tab} currentHospital={currentHospital} />
-            )}
+            {tab === "fhir" && <FHIRAPIs currentHospital={currentHospital} />}
+            {tab === "whatsapp_sms" && <WhatsAppSMS currentHospital={currentHospital} />}
+            {tab === "hl7" && <HL7Ready currentHospital={currentHospital} />}
+            {tab === "pacs" && <PACSDicom currentHospital={currentHospital} />}
+            {tab === "biometric" && <Biometric currentHospital={currentHospital} />}
+            {tab === "erp" && <ERPTally currentHospital={currentHospital} />}
+            {tab === "abdm_abha" && <ABDMABHA currentHospital={currentHospital} />}
+            {tab === "two_factor_auth" && <TwoFactorSecurity currentHospital={currentHospital} />}
+            {tab === "audit_compliance" && <AuditCompliance currentHospital={currentHospital} />}
             {tab === "dashboard" && (
               <Dashboard
                 stats={stats}

@@ -954,6 +954,25 @@ const WebhookEvent = makeModel("WebhookEvent", "webhook_events", {
 });
 
 
+const EnterpriseFeatureRecord = makeModel("EnterpriseFeatureRecord", "enterprise_feature_records", {
+    hospital_id: { type: Number, default: 1, index: true },
+    feature_key: { type: String, required: true, index: true },
+    record_type: { type: String, default: "item", index: true },
+    title: String,
+    status: { type: String, default: "active", index: true },
+    priority: { type: String, default: "normal", index: true },
+    owner: String,
+    external_id: String,
+    endpoint: String,
+    payload: { type: Object, default: {} },
+    metadata: { type: Object, default: {} },
+    notes: String,
+    created_by: Number,
+    updated_by: Number,
+});
+EnterpriseFeatureRecord.schema.index({ hospital_id: 1, feature_key: 1, record_type: 1, created_at: -1 }, { name: "enterprise_feature_record_lookup" });
+
+
 const SaaSPlan = makeModel("SaaSPlan", "saas_plans", {
     plan_id: { type: String, unique: true, index: true },
     name: { type: String, required: true },
@@ -1187,6 +1206,7 @@ module.exports = {
     IntegrationLog,
     WebhookSubscription,
     WebhookEvent,
+    EnterpriseFeatureRecord,
     DemoRequest,
     SalesActivity,
     LegalPolicy,
