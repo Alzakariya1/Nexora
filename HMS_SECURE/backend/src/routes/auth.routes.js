@@ -121,10 +121,10 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
   if (!user.hospital_id) user.hospital_id = DEFAULT_HOSPITAL_ID;
   const hospital = await Hospital.findOne({ id: Number(user.hospital_id || DEFAULT_HOSPITAL_ID) });
-  if (user.role !== 'super_admin' && hospital && hospital.status !== 'active') {
+  if (user.role !== 'super_admin' && hospital && !['active', 'trial'].includes(hospital.status)) {
     await loginHistoryEvent({ req, user, email, status: 'blocked', reason: 'inactive_hospital' });
     await audit(req, user.id, `Blocked login for inactive hospital ${hospital.name}`, 'security', user.hospital_id, { status: 'blocked', severity: 'warning' });
-    return res.status(403).json({ message: 'This hospital account is inactive or archived. Contact platform admin.' });
+    return res.status(403).json({ message: 'This hospital account is not active. Contact platform admin.' });
   }
   user.last_login_at = new Date();
   user.failed_login_attempts = 0;
@@ -147,6 +147,10 @@ router.post('/refresh-token', asyncHandler(async (req, res) => {
   const user = await User.findOne({ id: session.user_id, status: 'active' });
   if (!user) return res.status(401).json({ message: 'User inactive. Please login again.' });
   const hospital = await Hospital.findOne({ id: Number(user.hospital_id || DEFAULT_HOSPITAL_ID) });
+  if (user.role !== 'super_admin' && hospital && !['active', 'trial'].includes(hospital.status)) {
+    await AuthSession.updateOne({ id: session.id }, { $set: { status: 'revoked', revoked_at: new Date(), revoked_by: user.id } });
+    return res.status(403).json({ message: 'This hospital account is not active. Contact platform admin.' });
+  }
   const newRefreshToken = crypto.randomBytes(48).toString('hex');
   await AuthSession.updateOne({ id: session.id }, { $set: { refresh_token_hash: hashToken(newRefreshToken), last_used_at: new Date(), expires_at: new Date(Date.now() + refreshTokenTtlMs()) } });
   await audit(req, user.id, 'Refreshed auth session', 'security', user.hospital_id, { entity_type: 'auth_session', entity_id: session.id });

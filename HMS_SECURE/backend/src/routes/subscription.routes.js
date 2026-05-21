@@ -48,6 +48,32 @@ router.get('/subscription/current', verifyToken, asyncHandler(async (req, res) =
   res.json(await getHospitalSubscription(hospitalId));
 }));
 
+
+router.get('/subscription/guardrails', verifyToken, asyncHandler(async (req, res) => {
+  const hospitalId = Number(req.user.hospital_id || DEFAULT_HOSPITAL_ID);
+  const subscription = await getHospitalSubscription(hospitalId);
+  res.json({
+    hospital_id: subscription.hospital_id,
+    plan: subscription.plan,
+    status: subscription.status,
+    billing_cycle: subscription.billing_cycle,
+    guardrails: subscription.guardrails,
+    checks: subscription.checks,
+  });
+}));
+
+router.get('/tenants/:id/subscription/guardrails', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const subscription = await getHospitalSubscription(Number(req.params.id));
+  res.json({
+    hospital_id: subscription.hospital_id,
+    plan: subscription.plan,
+    status: subscription.status,
+    billing_cycle: subscription.billing_cycle,
+    guardrails: subscription.guardrails,
+    checks: subscription.checks,
+  });
+}));
+
 router.get('/tenants/:id/subscription', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   res.json(await getHospitalSubscription(Number(req.params.id)));
 }));

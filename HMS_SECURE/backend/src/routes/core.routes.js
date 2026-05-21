@@ -7,6 +7,7 @@ const multer = require('multer');
 const { cloudinary, hasCloudinaryConfig } = require('../config/cloudinary');
 const { createNotification } = require('../utils/notifications');
 const { auditEvent } = require('../utils/audit');
+const { ensureWithinLimit } = require('../utils/subscription');
 
 const router = express.Router();
 const upload = multer({
@@ -218,6 +219,8 @@ router.post('/doctors', requirePermission('doctor.create'), asyncHandler(async (
     const warnings = await buildDoctorDuplicateWarnings(req, payload);
 
     try {
+        const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'doctors', 1);
+        if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
         const r = await Doctor.create(tenantCreateData(req, payload));
         await auditEvent({ req, action: 'doctor.created', module_name: 'doctors', entity_type: 'doctor', entity_id: r.id, new_value: r.toJSON?.() || r });
         res.status(201).json({ message: 'Doctor created', id: r.id, doctor_uid: payload.doctor_uid, warnings, doctor: r.toJSON?.() || r });
@@ -883,6 +886,9 @@ router.post('/appointments', requirePermission('appointment.create'), asyncHandl
 
     const scheduleError = await ensureWithinDoctorSchedule(req, payload);
     if (scheduleError) return res.status(409).json({ message: scheduleError });
+
+    const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'appointments_per_month', 1);
+    if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
 
     const token_number = req.body.token_number || await generateTokenNumber(req, payload.appointment_date);
     const r = await Appointment.create(tenantCreateData(req, {

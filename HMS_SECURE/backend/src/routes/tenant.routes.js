@@ -17,7 +17,8 @@ const DEFAULT_FEATURE_FLAGS = FEATURE_FLAGS.reduce((acc, key) => { acc[key] = ke
 
 const VALID_TENANT_TYPES = ['hospital', 'clinic', 'diagnostic_center', 'nursing_home'];
 const VALID_PLANS = ['clinic', 'hospital', 'enterprise'];
-const VALID_STATUSES = ['active', 'inactive', 'archived'];
+const VALID_STATUSES = ['active', 'trial', 'suspended', 'inactive', 'archived'];
+const VALID_SUBSCRIPTION_STATUSES = ['trial', 'active', 'past_due', 'suspended', 'cancelled'];
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
 const PASSWORD_MIN_LENGTH = Number(process.env.PASSWORD_MIN_LENGTH || 8);
 const upload = multer({
@@ -66,6 +67,7 @@ function validateTenantPayload(payload) {
   if (payload.type && !VALID_TENANT_TYPES.includes(payload.type)) return 'Invalid hospital type';
   if (payload.plan && !VALID_PLANS.includes(payload.plan)) return 'Invalid hospital plan';
   if (payload.status && !VALID_STATUSES.includes(payload.status)) return 'Invalid hospital status';
+  if (payload.subscription?.status && !VALID_SUBSCRIPTION_STATUSES.includes(payload.subscription.status)) return 'Invalid subscription status';
   return null;
 }
 
@@ -219,6 +221,15 @@ function sanitizeFeatureFlags(featureFlags, plan = 'enterprise') {
   return normalizePlanFeatureFlags(plan, featureFlags);
 }
 
+function buildLifecycleUpdate(action, body = {}) {
+  const now = new Date();
+  if (action === 'activate') return { status: 'active', subscription: { status: 'active', renewed_at: now, notes: body.notes || '' } };
+  if (action === 'trial') return { status: 'trial', subscription: { status: 'trial', trial_start_date: body.trial_start_date || now, trial_end_date: body.trial_end_date || null, notes: body.notes || '' } };
+  if (action === 'suspend') return { status: 'suspended', subscription: { status: 'suspended', suspended_at: now, suspension_reason: body.reason || body.notes || '', notes: body.notes || '' } };
+  if (action === 'cancel') return { status: 'inactive', subscription: { status: 'cancelled', cancelled_at: now, cancellation_reason: body.reason || body.notes || '', notes: body.notes || '' } };
+  return null;
+}
+
 router.get('/tenant/modules', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json(DEFAULT_MODULES);
 });
@@ -246,7 +257,7 @@ router.post('/tenants', verifyToken, allowRoles('super_admin'), requirePermissio
     status: req.body.status || 'active',
     plan: req.body.plan || 'enterprise',
     plan_limits: mergePlanLimits(req.body.plan || 'enterprise', req.body.plan_limits || {}),
-    subscription: { status: req.body.subscription?.status || 'active', billing_cycle: req.body.subscription?.billing_cycle || 'monthly', renewal_date: req.body.subscription?.renewal_date || null, notes: req.body.subscription?.notes || '' },
+    subscription: { status: req.body.subscription?.status || (req.body.status === 'trial' ? 'trial' : 'active'), billing_cycle: req.body.subscription?.billing_cycle || 'monthly', renewal_date: req.body.subscription?.renewal_date || null, next_billing_date: req.body.subscription?.next_billing_date || null, trial_start_date: req.body.subscription?.trial_start_date || (req.body.status === 'trial' ? new Date() : null), trial_end_date: req.body.subscription?.trial_end_date || null, notes: req.body.subscription?.notes || '' },
     enabled_modules: sanitizeModules(req.body.enabled_modules, req.body.plan || 'enterprise'),
     feature_flags: sanitizeFeatureFlags(req.body.feature_flags, req.body.plan || 'enterprise'),
     branding: req.body.branding || {},
@@ -345,6 +356,23 @@ router.patch('/tenants/:id', verifyToken, allowRoles('super_admin'), requirePerm
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   await auditTenantAction(req, `Updated hospital ${hospital.name}`);
   res.json(publicHospital(hospital));
+}));
+
+
+router.post('/tenants/:id/lifecycle/:action', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const hospital = await findHospitalByIdentifier(req.params.id);
+  if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+  const action = String(req.params.action || '').toLowerCase();
+  const lifecycle = buildLifecycleUpdate(action, req.body || {});
+  if (!lifecycle) return res.status(400).json({ message: 'Invalid lifecycle action. Use activate, trial, suspend or cancel.' });
+  if (Number(hospital.id) === DEFAULT_HOSPITAL_ID && ['suspend', 'cancel'].includes(action)) {
+    return res.status(400).json({ message: 'Default hospital cannot be suspended or cancelled' });
+  }
+  hospital.status = lifecycle.status;
+  hospital.subscription = { ...(hospital.subscription || {}), ...(lifecycle.subscription || {}), updated_at: new Date(), updated_by: req.user.id };
+  await hospital.save();
+  await auditTenantAction(req, `Tenant lifecycle ${action} for hospital ${hospital.name}`);
+  res.json({ message: `Tenant ${action} applied successfully`, hospital: publicHospital(hospital) });
 }));
 
 router.get('/tenants/:id/admins', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {

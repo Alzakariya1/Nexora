@@ -21,7 +21,8 @@
     "tenant:provision": "node scripts/provision-tenant-db.js",
     "tenant:migrate": "node scripts/migrate-shared-to-tenant.js",
     "tenant:audit": "node scripts/tenant-isolation-audit.js",
-    "tenant:safety-check": "node scripts/tenant-safety-check.js"
+    "tenant:safety-check": "node scripts/tenant-safety-check.js",
+    "check:plan-limits": "node scripts/plan-limit-check.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

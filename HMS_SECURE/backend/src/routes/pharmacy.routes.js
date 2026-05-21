@@ -1,6 +1,7 @@
 const express = require('express');
 const { Medicine, PharmacySale, Prescription } = require('../models');
 const { auditEvent } = require('../utils/audit');
+const { ensureWithinLimit } = require('../utils/subscription');
 const asyncHandler = require('../utils/asyncHandler');
 const { verifyToken, requirePermission } = require('../middleware/auth');
 const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/tenant');
@@ -80,6 +81,9 @@ async function createMedicine(req, res) {
     batch_number: payload.batch_number || '',
   }));
   if (duplicate) return res.status(409).json({ message: 'Medicine with same batch already exists' });
+
+  const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'medicines', 1);
+  if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
 
   const r = await Medicine.create(tenantCreateData(req, payload));
   await auditEvent({ req, action: 'pharmacy.medicine_created', module_name: 'pharmacy', entity_type: 'Medicine', entity_id: r.id, new_value: payload });

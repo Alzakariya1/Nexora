@@ -38,7 +38,7 @@ async function resolveTenantDatabase(req, hospitalId) {
   // A token database is trusted only for the same hospital encoded in the token.
   if (tokenDb && userHospitalId && Number(userHospitalId) === Number(hospitalId)) return tokenDb;
 
-  const hospital = await Hospital.findOne({ id: Number(hospitalId), status: { $ne: 'inactive' }, is_deleted: { $ne: true } }).lean();
+  const hospital = await Hospital.findOne({ id: Number(hospitalId), status: { $in: ['active', 'trial'] }, is_deleted: { $ne: true } }).lean();
   return sanitizeDbName(hospital?.tenant_db_name || hospital?.db_name || '');
 }
 

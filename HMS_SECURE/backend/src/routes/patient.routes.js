@@ -7,6 +7,7 @@ const router = express.Router();
 const multer = require("multer");
 const { cloudinary, hasCloudinaryConfig } = require("../config/cloudinary");
 const { auditEvent } = require("../utils/audit");
+const { ensureWithinLimit } = require("../utils/subscription");
 router.use(verifyToken, attachTenant);
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -359,6 +360,8 @@ router.post(
             }
         }
         try {
+            const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'patients', 1);
+            if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
             const duplicateWarnings = await findPotentialDuplicatePatients(req, payload);
             const r = await Patient.create(tenantCreateData(req, payload));
             await auditEvent({ req, action: 'patient.created', module_name: 'patients', entity_type: 'Patient', entity_id: r.id, new_value: r.toJSON?.() || r });
