@@ -10,11 +10,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 app.set("trust proxy", Number(process.env.TRUST_PROXY || 1));
 app.use(helmet());
-const allowedOrigins = (
-    process.env.FRONTEND_URL
+const allowedOrigins = Array.from(new Set([
+    ...(process.env.FRONTEND_URL
         ? process.env.FRONTEND_URL.split(",")
-        : ["http://localhost:5173", "http://localhost:3000"]
-)
+        : ["http://localhost:5173", "http://localhost:3000"]),
+    ...(process.env.CORS_EXTRA_ORIGINS ? process.env.CORS_EXTRA_ORIGINS.split(",") : []),
+]))
     .map((x) => x.trim())
     .filter(Boolean);
 app.use(

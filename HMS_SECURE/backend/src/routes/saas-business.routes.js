@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { Hospital, User, SaaSPlan } = require('../models');
 const { DEFAULT_HOSPITAL_ID } = require('../middleware/tenant');
 const { auditEvent } = require('../utils/audit');
@@ -82,11 +82,11 @@ async function planRows() {
   return defaults.map((p) => customMap.get(p.id) || p).concat(custom.filter((p) => !PLAN_DEFINITIONS[p.plan_id || p.id]).map((p) => ({ ...p, id: p.plan_id || p.id, source: 'custom' })));
 }
 
-router.get('/saas/business/plans', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/saas/business/plans', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   res.json(await planRows());
 }));
 
-router.post('/saas/business/plans', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/business/plans', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const payload = normalizePlanBody(req.body);
   const existing = await SaaSPlan.findOne({ plan_id: payload.plan_id });
   if (existing) return res.status(409).json({ message: 'Plan id already exists. Use update instead.' });
@@ -95,7 +95,7 @@ router.post('/saas/business/plans', verifyToken, requirePermission('hospital.man
   res.status(201).json({ message: 'SaaS plan created', plan });
 }));
 
-router.patch('/saas/business/plans/:planId', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/saas/business/plans/:planId', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const planId = String(req.params.planId || '').trim().toLowerCase();
   const existing = await SaaSPlan.findOne({ plan_id: planId }) || (PLAN_DEFINITIONS[planId] ? null : undefined);
   if (existing === undefined) return res.status(404).json({ message: 'Plan not found' });
@@ -124,7 +124,7 @@ router.get('/saas/license/status', verifyToken, asyncHandler(async (req, res) =>
   res.json({ hospital_id: hospitalId, hospital_name: hospital.name, status, blocked, trial_end_date: trialEnd || null, license_expiry: licenseExpiry || null, subscription: sub, warnings });
 }));
 
-router.post('/saas/onboarding/hospitals', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/onboarding/hospitals', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const name = String(req.body.name || '').trim();
   if (!name) return res.status(400).json({ message: 'Hospital name is required' });
   const code = sanitizeCode(req.body.hospital_code || `HOSP${Date.now()}`);
@@ -194,7 +194,7 @@ router.post('/saas/onboarding/hospitals', verifyToken, requirePermission('hospit
   res.status(201).json({ message: 'Hospital onboarded successfully', hospital, admin_user: publicUser(adminUser), tenant_db_name: tenantDbName, storage_mode: tenantDbName ? 'database-per-tenant' : 'shared-database', license: await getHospitalSubscription(hospital.id) });
 }));
 
-router.get('/saas/onboarding/checklist', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
+router.get('/saas/onboarding/checklist', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json({
     checklist: [
       'Create hospital tenant with unique hospital code',

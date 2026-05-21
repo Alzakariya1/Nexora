@@ -4,13 +4,13 @@ const { Hospital, User, AuditLog } = require('../models');
 const multer = require('multer');
 const { cloudinary, hasCloudinaryConfig } = require('../config/cloudinary');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { DEFAULT_HOSPITAL_ID } = require('../middleware/tenant');
 const { getPlan, getAllowedModules, getAllowedFeatures, normalizePlanModules, normalizePlanFeatureFlags, mergePlanLimits, ensureWithinLimit } = require('../utils/subscription');
 
 const router = express.Router();
 
-const DEFAULT_MODULES = ['dashboard', 'patients', 'doctors', 'appointments', 'beds', 'lab', 'radiology', 'pharmacy', 'billing', 'profile', 'auditSecurity', 'configuration', 'tenants'];
+const DEFAULT_MODULES = ['dashboard', 'patients', 'doctors', 'appointments', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'billing', 'profile', 'auditSecurity', 'configuration', 'tenants'];
 const ALLOWED_MODULES = new Set(DEFAULT_MODULES);
 const FEATURE_FLAGS = ['fhir', 'hl7', 'pacs', 'biometric', 'insurance_tpa', 'erp', 'whatsapp_sms', 'abdm_abha', 'two_factor_auth', 'audit_compliance'];
 const DEFAULT_FEATURE_FLAGS = FEATURE_FLAGS.reduce((acc, key) => { acc[key] = key === 'audit_compliance'; return acc; }, {});
@@ -219,11 +219,11 @@ function sanitizeFeatureFlags(featureFlags, plan = 'enterprise') {
   return normalizePlanFeatureFlags(plan, featureFlags);
 }
 
-router.get('/tenant/modules', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
+router.get('/tenant/modules', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json(DEFAULT_MODULES);
 });
 
-router.get('/tenant/features', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
+router.get('/tenant/features', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json({ features: FEATURE_FLAGS, defaults: DEFAULT_FEATURE_FLAGS });
 });
 
@@ -233,12 +233,12 @@ router.get('/tenant/me', verifyToken, asyncHandler(async (req, res) => {
   res.json(publicHospital(hospital));
 }));
 
-router.get('/tenants', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/tenants', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   const hospitals = await Hospital.find().sort({ id: -1 });
   res.json(hospitals.map(publicHospital));
 }));
 
-router.post('/tenants', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/tenants', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const payload = {
     hospital_code: sanitizeHospitalCode(req.body.hospital_code),
     name: String(req.body.name || '').trim(),
@@ -302,7 +302,7 @@ router.post('/tenants', verifyToken, requirePermission('hospital.manage'), async
   });
 }));
 
-router.patch('/tenants/:id', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/tenants/:id', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const existingHospital = await findHospitalByIdentifier(req.params.id);
   if (!existingHospital) return res.status(404).json({ message: 'Hospital not found' });
   const nextPlan = req.body.plan || existingHospital.plan || 'enterprise';
@@ -347,7 +347,7 @@ router.patch('/tenants/:id', verifyToken, requirePermission('hospital.manage'), 
   res.json(publicHospital(hospital));
 }));
 
-router.get('/tenants/:id/admins', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.get('/tenants/:id/admins', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -355,7 +355,7 @@ router.get('/tenants/:id/admins', verifyToken, requirePermission('hospital.manag
   res.json(admins.map(publicUser));
 }));
 
-router.post('/tenants/:id/admins', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/tenants/:id/admins', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -376,7 +376,7 @@ router.post('/tenants/:id/admins', verifyToken, requirePermission('hospital.mana
   res.status(201).json({ message: 'Hospital admin created successfully', admin_user: publicUser(adminUser) });
 }));
 
-router.post('/tenants/:id/logo', verifyToken, requirePermission('hospital.manage'), upload.single('logo'), asyncHandler(async (req, res) => {
+router.post('/tenants/:id/logo', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), upload.single('logo'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -422,7 +422,7 @@ router.post('/tenants/:id/logo', verifyToken, requirePermission('hospital.manage
   res.json({ message: logoStorage === 'cloudinary' ? 'Hospital logo uploaded successfully' : 'Hospital logo saved successfully. Cloudinary is not configured, so the file was stored in MongoDB.', hospital: publicHospital(hospital) });
 }));
 
-router.delete('/tenants/:id', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.delete('/tenants/:id', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);

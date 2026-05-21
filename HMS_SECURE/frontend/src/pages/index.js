@@ -56,3 +56,5 @@ export { default as FHIRAPIs } from './FHIRAPIs';
 export { default as WhatsAppSMS } from './WhatsAppSMS';
 
 export { default as EnterpriseFeatureWorkspace } from './EnterpriseFeatureWorkspace';
+
+export { default as IPD } from './IPD';

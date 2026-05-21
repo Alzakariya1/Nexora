@@ -44,3 +44,5 @@ export { legalSecurityApi } from './legalSecurityApi';
 export { pilotApi } from './pilotApi';
 
 export { enterpriseFeatureApi } from './enterpriseFeatureApi';
+
+export { ipdApi } from "./ipdApi";

@@ -14,7 +14,7 @@ export const PLAN_DEFINITIONS = {
     price: '₹9,999/mo',
     description: 'For hospitals that need OPD/IPD, lab, radiology, pharmacy and billing.',
     limits: { users: 50, patients: 25000, doctors: 50, appointments_per_month: 15000, medicines: 5000, branches: 3, storage_gb: 100 },
-    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications'],
+    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications'],
   },
   enterprise: {
     id: 'enterprise',
@@ -22,7 +22,7 @@ export const PLAN_DEFINITIONS = {
     price: '₹24,999/mo',
     description: 'For chains and enterprise hospitals with advanced controls and integrations.',
     limits: { users: 500, patients: 500000, doctors: 500, appointments_per_month: 200000, medicines: 50000, branches: 50, storage_gb: 1000 },
-    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications', 'integration', 'tenants'],
+    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications', 'integration', 'tenants'],
   },
 };
 
@@ -49,6 +49,7 @@ export const ROLE_PERMISSIONS = {
     'doctor.view', 'doctor.create', 'doctor.edit', 'doctor.delete',
     'appointment.view', 'appointment.create', 'appointment.edit', 'appointment.delete', 'portal.patient.view', 'portal.doctor.view', 'appointment.status.update', 'emr.view', 'emr.create', 'emr.edit', 'emr.delete',
     'bed.view', 'bed.create', 'bed.status.update',
+    'opd.view', 'opd.create', 'ipd.view', 'ipd.create',
     'lab.view', 'lab.create',
     'radiology.view', 'radiology.create',
     'pharmacy.view', 'pharmacy.create', 'pharmacy.stock.manage', 'inventory.view', 'inventory.manage',
@@ -81,6 +82,7 @@ export const ROLE_PERMISSIONS = {
     'dashboard.view',
     'patient.view', 'patient.edit',
     'bed.view', 'bed.status.update',
+    'ipd.view', 'ipd.create',
     'appointment.view',
     'admin.profile.manage'
   ],
@@ -89,6 +91,7 @@ export const ROLE_PERMISSIONS = {
     'patient.view', 'patient.create', 'patient.edit', 'patient.document.manage',
     'appointment.view', 'appointment.create', 'appointment.edit', 'appointment.delete', 'portal.patient.view', 'portal.doctor.view', 'emr.view', 'emr.create',
     'bed.view',
+    'ipd.view',
     'billing.view', 'billing.create',
     'admin.profile.manage'
   ],

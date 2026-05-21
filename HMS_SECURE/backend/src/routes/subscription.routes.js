@@ -1,6 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { Hospital } = require('../models');
 const { DEFAULT_HOSPITAL_ID } = require('../middleware/tenant');
 const { auditEvent } = require('../utils/audit');
@@ -48,11 +48,11 @@ router.get('/subscription/current', verifyToken, asyncHandler(async (req, res) =
   res.json(await getHospitalSubscription(hospitalId));
 }));
 
-router.get('/tenants/:id/subscription', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.get('/tenants/:id/subscription', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   res.json(await getHospitalSubscription(Number(req.params.id)));
 }));
 
-router.patch('/tenants/:id/subscription', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/tenants/:id/subscription', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospitalId = Number(req.params.id);
   const hospital = await Hospital.findOne({ id: hospitalId });
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });

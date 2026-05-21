@@ -28,6 +28,7 @@ export default function Patients({
   paginatedPatients,
   editPatient,
   deletePatient,
+  deletePatientDocument,
   patients,
   setSelectedPatient,
   setTab,
@@ -70,6 +71,42 @@ export default function Patients({
 
   const timelineSummary = patientTimeline?.summary || {};
   const timelineRows = patientTimeline?.timeline || [];
+
+
+  const timelineIconMap = {
+    registration: "bi-person-plus",
+    appointment: "bi-calendar-check",
+    opd: "bi-clipboard2-pulse",
+    clinical: "bi-journal-medical",
+    prescription: "bi-capsule",
+    billing: "bi-receipt",
+    pharmacy: "bi-bag-plus",
+    lab: "bi-droplet",
+    radiology: "bi-radioactive",
+    ipd: "bi-hospital",
+    insurance: "bi-shield-check",
+    nursing: "bi-heart-pulse",
+    document: "bi-file-earmark-medical",
+  };
+
+  function samePatient(record) {
+    const ids = [selectedPatient?.patient_id, selectedPatient?.patient_uid, selectedPatient?.id].filter(Boolean).map(String);
+    return ids.includes(String(record?.patient_id));
+  }
+
+  function timelineDetail(item) {
+    if (item.type === "opd") return item.payload?.diagnosis ? `Diagnosis: ${item.payload.diagnosis}` : item.payload?.chief_complaint || "Clinical consultation recorded";
+    if (item.type === "clinical") return item.payload?.diagnosis || item.payload?.notes || item.payload?.record_type || "Clinical record";
+    if (item.type === "prescription") return item.payload?.medicines?.length > 0 ? `${item.payload.medicines.length} medicine item(s)` : "Prescription saved";
+    if (item.type === "billing") return `Total: ₹${item.payload?.total_amount ?? item.payload?.amount ?? 0} • Due: ₹${item.payload?.due_amount ?? 0}`;
+    if (item.type === "pharmacy") return `${item.payload?.medicine_name || "Medicine"} • Qty ${item.payload?.quantity || 0} • ₹${item.payload?.total_amount || 0}`;
+    if (item.type === "lab") return `${item.payload?.test_status || "ordered"}${item.payload?.sample_barcode ? ` • Barcode ${item.payload.sample_barcode}` : ""}`;
+    if (item.type === "radiology") return `${item.payload?.modality || "Radiology"}${item.payload?.impression ? ` • ${item.payload.impression}` : ""}`;
+    if (item.type === "ipd") return item.payload?.bed_number ? `Bed ${item.payload.bed_number}` : item.payload?.status || "Admission record";
+    if (item.type === "insurance") return `${item.payload?.insurance_provider || item.payload?.tpa_name || "Claim"} • ₹${item.payload?.claim_amount || 0}`;
+    if (item.type === "document") return item.payload?.document_type || item.payload?.category || item.payload?.file_name || "Uploaded document";
+    return item.status || item.type;
+  }
 
   function getCustomValue(field) {
     return patient.custom_fields?.[field.field_key] ?? field.default_value ?? "";
@@ -562,13 +599,9 @@ export default function Patients({
                         <span>Pending Amount</span>
                         <h3>
                           ₹
-                          {bills
-                            .filter(
-                              (b) =>
-                                b.patient_id === selectedPatient.patient_id &&
-                                b.status !== "paid",
-                            )
-                            .reduce((sum, b) => sum + Number(b.amount || 0), 0)}
+                          {timelineSummary.pendingAmount ?? bills
+                            .filter((b) => samePatient(b) && b.status !== "paid")
+                            .reduce((sum, b) => sum + Number(b.due_amount ?? b.amount ?? 0), 0)}
                         </h3>
                       </div>
                     </div>
@@ -589,6 +622,8 @@ export default function Patients({
                       <span>Lab: <b>{timelineSummary.labTests || 0}</b></span>
                       <span>Radiology: <b>{timelineSummary.radiologyTests || 0}</b></span>
                       <span>IPD: <b>{timelineSummary.admissions || 0}</b></span>
+                      <span>Pharmacy: <b>{timelineSummary.pharmacySales || 0}</b></span>
+                      <span>Claims: <b>{timelineSummary.insuranceClaims || 0}</b></span>
                     </div>
 
                     {timelineLoading && <p className="muted">Loading patient timeline...</p>}
@@ -598,10 +633,10 @@ export default function Patients({
                     )}
                     {!timelineLoading && !timelineError && timelineRows.length > 0 && (
                       <div className="emr-timeline-list">
-                        {timelineRows.slice(0, 12).map((item, index) => (
+                        {timelineRows.map((item, index) => (
                           <div className="emr-timeline-item" key={`${item.type}-${item.payload?.id ?? index}-${index}`}>
                             <div className={`emr-timeline-icon ${item.type}`}>
-                              <i className={`bi ${item.type === "billing" ? "bi-receipt" : item.type === "prescription" ? "bi-capsule" : item.type === "opd" ? "bi-clipboard2-pulse" : item.type === "document" ? "bi-file-earmark-medical" : item.type === "ipd" ? "bi-hospital" : "bi-calendar-check"}`}></i>
+                              <i className={`bi ${timelineIconMap[item.type] || "bi-activity"}`}></i>
                             </div>
                             <div className="emr-timeline-body">
                               <div className="emr-timeline-head">
@@ -609,9 +644,7 @@ export default function Patients({
                                 <span>{item.status || item.type}</span>
                               </div>
                               <p>{item.date ? new Date(item.date).toLocaleString() : "Date not available"}</p>
-                              {item.type === "opd" && item.payload?.diagnosis && <small>Diagnosis: {item.payload.diagnosis}</small>}
-                              {item.type === "prescription" && item.payload?.medicines?.length > 0 && <small>{item.payload.medicines.length} medicine item(s)</small>}
-                              {item.type === "billing" && <small>Total: ₹{item.payload?.total_amount ?? item.payload?.amount ?? 0}</small>}
+                              <small>{timelineDetail(item)}</small>
                             </div>
                           </div>
                         ))}
@@ -624,7 +657,7 @@ export default function Patients({
 
                       {(() => {
                         const patientAppointments = appointments.filter(
-                          (a) => a.patient_id === selectedPatient.patient_id,
+                          (a) => samePatient(a),
                         );
 
                         if (!patientAppointments.length) {
@@ -707,10 +740,10 @@ export default function Patients({
 
                         return (
                           <div className="patient-document-list">
-                            {docs.map((doc) => (
+                            {docs.map((doc, docIndex) => (
                               <div
                                 className="patient-document-item"
-                                key={doc.id}
+                                key={doc.id || doc.file_public_id || `${doc.file_name}-${docIndex}`}
                               >
                                 <div className="patient-document-info">
                                   <div className="document-icon">
@@ -747,6 +780,17 @@ export default function Patients({
                                   >
                                     <i className="bi bi-download"></i>
                                   </a>
+
+                                  {permissions.patientDocumentManage && selectedPatient?.id && (
+                                    <button
+                                      type="button"
+                                      className="icon-btn delete-btn"
+                                      title="Delete Document"
+                                      onClick={() => deletePatientDocument?.(selectedPatient.id, docIndex)}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ))}

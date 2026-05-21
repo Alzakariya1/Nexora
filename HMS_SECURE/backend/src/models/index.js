@@ -22,7 +22,7 @@ async function nextId(name, db) {
 const TENANT_COLLECTIONS = new Set([
     "departments", "patients", "doctors", "doctor_schedules", "appointments", "beds",
     "opd_records", "ipd_admissions", "nursing_notes", "lab_test_templates", "lab_tests",
-    "radiology_tests", "medicines", "pharmacy_sales", "billings", "insurance_claims",
+    "radiology_tests", "medicines", "pharmacy_sales", "billing", "billings", "insurance_claims",
     "prescriptions", "clinical_records", "audit_logs", "login_history", "security_settings",
     "dynamic_fields", "templates", "notifications", "communication_logs", "suppliers",
     "inventory_items", "inventory_batches", "purchase_orders", "supplier_bills",
@@ -74,6 +74,23 @@ const User = makeModel("User", "users", {
     role: { type: String, default: "receptionist" },
     status: { type: String, default: "active" },
     permissions: { type: [String], default: [] },
+    failed_login_attempts: { type: Number, default: 0 },
+    locked_until: Date,
+    last_failed_login_at: Date,
+    password_changed_at: Date,
+});
+const AuthSession = makeModel("AuthSession", "auth_sessions", {
+    user_id: { type: Number, index: true },
+    hospital_id: { type: Number, default: 1, index: true },
+    session_id: { type: String, unique: true, index: true },
+    refresh_token_hash: { type: String, index: true },
+    user_agent: String,
+    ip: String,
+    status: { type: String, default: "active", index: true },
+    expires_at: { type: Date, index: true },
+    revoked_at: Date,
+    revoked_by: Number,
+    last_used_at: Date,
 });
 const Hospital = makeModel("Hospital", "hospitals", {
     hospital_code: { type: String, unique: true, sparse: true, index: true },
@@ -99,7 +116,7 @@ const Hospital = makeModel("Hospital", "hospitals", {
             notes: "",
         },
     },
-    enabled_modules: { type: [String], default: ['dashboard', 'commandCenter', 'patients', 'doctors', 'appointments', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'operations', 'tenants'] },
+    enabled_modules: { type: [String], default: ['dashboard', 'commandCenter', 'patients', 'doctors', 'appointments', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'operations', 'tenants'] },
     feature_flags: {
         type: Object,
         default: {
@@ -144,6 +161,10 @@ const Patient = makeModel("Patient", "patients", {
     insurance_provider: String,
     insurance_policy_number: String,
 
+    status: { type: String, default: "active", index: true },
+    deleted_at: Date,
+    deleted_by: Number,
+
     documents: [
         {
             title: String,
@@ -187,7 +208,9 @@ const Doctor = makeModel("Doctor", "doctors", {
     qualification: String,
     consultation_fee: Number,
     department_id: Number,
-    status: { type: String, default: "active" },
+    status: { type: String, default: "active", index: true },
+    deleted_at: Date,
+    deleted_by: Number,
     custom_fields: { type: Object, default: {} },
 
     // Reserved for the next doctor-profile phase. Keeping these schema fields now is backward compatible
@@ -258,11 +281,21 @@ const Appointment = makeModel("Appointment", "appointments", {
     completed_at: Date,
     cancelled_at: Date,
     cancellation_reason: String,
+    no_show_reason: String,
+    reschedule_reason: String,
+    rescheduled_at: Date,
+    previous_schedule: { type: Object, default: null },
+    deleted_at: Date,
+    deleted_by: Number,
     notes: String,
 });
 Appointment.schema.index(
-    { hospital_id: 1, doctor_id: 1, appointment_date: 1, appointment_time: 1 },
+    { hospital_id: 1, doctor_id: 1, appointment_date: 1, appointment_time: 1, status: 1 },
     { name: "appointment_doctor_slot_lookup" },
+);
+Appointment.schema.index(
+    { hospital_id: 1, appointment_date: 1, token_number: 1 },
+    { name: "appointment_daily_token_lookup" },
 );
 const Bed = makeModel("Bed", "beds", {
     hospital_id: { type: Number, default: 1, index: true },
@@ -274,7 +307,45 @@ Bed.schema.index(
     { hospital_id: 1, ward: 1, bed_number: 1 },
     { unique: true, name: "bed_hospital_ward_number_unique", partialFilterExpression: { bed_number: { $type: "string" } } },
 );
-const OpdRecord = makeModel("OpdRecord", "opd_records", { hospital_id: { type: Number, default: 1, index: true } });
+const OpdRecord = makeModel("OpdRecord", "opd_records", {
+    hospital_id: { type: Number, default: 1, index: true },
+    patient_id: { type: String, trim: true, index: true },
+    doctor_id: { type: String, trim: true, index: true },
+    appointment_id: Number,
+    visit_date: String,
+    chief_complaint: String,
+    history_present_illness: String,
+    past_history: String,
+    medication_history: String,
+    surgical_history: String,
+    family_history: String,
+    allergies: { type: [String], default: [] },
+    vitals: { type: Object, default: {} },
+    examination_findings: String,
+    diagnosis: String,
+    provisional_diagnosis: String,
+    final_diagnosis: String,
+    diagnosis_code: String,
+    clinical_notes: String,
+    treatment_plan: String,
+    advice: String,
+    referral_notes: String,
+    investigation_orders: { type: [Object], default: [] },
+    follow_up_date: String,
+    prescriptions: { type: [Object], default: [] },
+    status: { type: String, default: "completed", index: true },
+    is_finalized: { type: Boolean, default: false },
+    locked_at: Date,
+    finalized_by: Number,
+    archived_at: Date,
+    archived_by: Number,
+    archive_reason: String,
+    last_edit_reason: String,
+    last_edited_by: Number,
+    last_edited_at: Date,
+});
+OpdRecord.schema.index({ hospital_id: 1, patient_id: 1, visit_date: -1 }, { name: "opd_patient_visit_lookup" });
+OpdRecord.schema.index({ hospital_id: 1, doctor_id: 1, visit_date: -1 }, { name: "opd_doctor_visit_lookup" });
 const IpdAdmission = makeModel("IpdAdmission", "ipd_admissions", { hospital_id: { type: Number, default: 1, index: true } });
 const NursingNote = makeModel("NursingNote", "nursing_notes", { hospital_id: { type: Number, default: 1, index: true } });
 const LabTestTemplate = makeModel("LabTestTemplate", "lab_test_templates", {
@@ -549,6 +620,32 @@ const Billing = makeModel("Billing", "billing", {
     status: { type: String, default: "pending", index: true },
     payment_status: { type: String, default: "pending", index: true },
     payment_mode: String,
+    transaction_id: String,
+    service_type: { type: String, default: "opd", index: true },
+    billing_type: { type: String, default: "opd", index: true },
+    visit_type: String,
+    admission_id: Number,
+    appointment_id: Number,
+    claim_id: Number,
+    corporate_name: String,
+    insurance_provider: String,
+    approval_status: { type: String, default: "not_required", index: true },
+    approval_reason: String,
+    approved_by: Number,
+    approved_at: Date,
+    advance_amount: { type: Number, default: 0 },
+    refund_amount: { type: Number, default: 0 },
+    refund_reason: String,
+    refunded_at: Date,
+    refunded_by: Number,
+    discount_reason: String,
+    cancel_reason: String,
+    cancelled_at: Date,
+    cancelled_by: Number,
+    is_archived: { type: Boolean, default: false, index: true },
+    archived_at: Date,
+    archived_by: Number,
+    archive_reason: String,
     notes: String,
     billing_date: Date,
 });
@@ -745,9 +842,14 @@ const AuditLog = makeModel("AuditLog", "audit_logs", {
     user_agent: String,
     method: String,
     path: String,
+    reason: String,
+    changed_fields: { type: [String], default: [] },
+    metadata: { type: Object, default: {} },
 });
 AuditLog.schema.index({ hospital_id: 1, created_at: -1 }, { name: "audit_hospital_recent_lookup" });
 AuditLog.schema.index({ hospital_id: 1, module_name: 1, status: 1 }, { name: "audit_hospital_module_status_lookup" });
+AuditLog.schema.index({ hospital_id: 1, entity_type: 1, entity_id: 1, created_at: -1 }, { name: "audit_entity_timeline_lookup" });
+AuditLog.schema.index({ hospital_id: 1, severity: 1, created_at: -1 }, { name: "audit_severity_recent_lookup" });
 const LoginHistory = makeModel("LoginHistory", "login_history", {
     hospital_id: { type: Number, default: 1, index: true },
     user_id: { type: Number, index: true },
@@ -1159,6 +1261,7 @@ Notification.schema.index({ hospital_id: 1, created_at: -1 }, { name: "notificat
 module.exports = {
     Counter,
     User,
+    AuthSession,
     Hospital,
     Department,
     Patient,

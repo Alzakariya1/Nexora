@@ -1,6 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { Hospital, User, Patient, Doctor, Appointment, Medicine, Billing } = require('../models');
 const { PLAN_DEFINITIONS, getHospitalSubscription } = require('../utils/subscription');
 const { csvEscape } = require('../utils/audit');
@@ -54,7 +54,7 @@ async function tenantUsage(hospital) {
   return { usage, limitHealth, revenue, warnings };
 }
 
-router.get('/saas/overview', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/saas/overview', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   const hospitals = await Hospital.find().sort({ id: -1 }).lean();
   const tenantRows = await Promise.all(hospitals.map(async (hospital) => {
     const subscription = await getHospitalSubscription(Number(hospital.id));
@@ -105,7 +105,7 @@ router.get('/saas/overview', verifyToken, requirePermission('hospital.manage'), 
   });
 }));
 
-router.get('/saas/tenants/export.csv', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/saas/tenants/export.csv', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   const hospitals = await Hospital.find().sort({ id: -1 }).lean();
   const rows = await Promise.all(hospitals.map(async (hospital) => {
     const metrics = await tenantUsage(hospital);

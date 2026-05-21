@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { Hospital, TenantBackup } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { auditEvent } = require('../utils/audit');
 const {
   buildTenantDbName,
@@ -15,7 +15,7 @@ const {
 } = require('../config/tenantDb');
 
 const router = express.Router();
-router.use(verifyToken, requirePermission('hospital.manage'));
+router.use(verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'));
 
 const BACKUP_DIR = process.env.TENANT_BACKUP_DIR || path.join(__dirname, '../../backups/tenants');
 function ensureBackupDir() { fs.mkdirSync(BACKUP_DIR, { recursive: true }); }

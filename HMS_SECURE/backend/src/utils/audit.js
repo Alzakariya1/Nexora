@@ -15,6 +15,20 @@ function getClientMeta(req = {}) {
   };
 }
 
+function summarizeChangedFields(oldValue = {}, newValue = {}) {
+  const oldObj = oldValue && typeof oldValue === 'object' ? oldValue : {};
+  const newObj = newValue && typeof newValue === 'object' ? newValue : {};
+  const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+  const changed = [];
+  for (const key of keys) {
+    if (['_id', 'updated_at', 'created_at', 'password_hash', 'password'].includes(key)) continue;
+    const a = JSON.stringify(oldObj[key] ?? null);
+    const b = JSON.stringify(newObj[key] ?? null);
+    if (a !== b) changed.push(key);
+  }
+  return changed.sort();
+}
+
 function safeJson(value) {
   if (value === undefined) return null;
   if (value === null) return null;
@@ -28,7 +42,7 @@ function safeJson(value) {
   }
 }
 
-async function auditEvent({ req, userId, hospital_id, action, module_name = 'system', entity_type = null, entity_id = null, old_value = null, new_value = null, status = 'success', severity = 'info' }) {
+async function auditEvent({ req, userId, hospital_id, action, module_name = 'system', entity_type = null, entity_id = null, old_value = null, new_value = null, status = 'success', severity = 'info', reason = null, metadata = null }) {
   try {
     const actor = req?.user || {};
     const meta = getClientMeta(req);
@@ -42,6 +56,9 @@ async function auditEvent({ req, userId, hospital_id, action, module_name = 'sys
       entity_id: entity_id === undefined || entity_id === null ? null : String(entity_id),
       old_value: safeJson(old_value),
       new_value: safeJson(new_value),
+      reason: reason || req?.body?.reason || req?.query?.reason || null,
+      changed_fields: Array.isArray(metadata?.changed_fields) ? metadata.changed_fields : summarizeChangedFields(old_value, new_value),
+      metadata: safeJson(metadata),
       status,
       severity,
       ...meta,
@@ -73,4 +90,4 @@ function csvEscape(value) {
   return `"${str.replace(/"/g, '""')}"`;
 }
 
-module.exports = { auditEvent, loginHistoryEvent, getClientMeta, csvEscape };
+module.exports = { auditEvent, loginHistoryEvent, getClientMeta, csvEscape, summarizeChangedFields, safeJson };

@@ -55,8 +55,10 @@ router.get('/compliance/summary', requirePermission('compliance.view'), asyncHan
     BackupVerification.countDocuments(tenantFilter(req, { status: { $in: ['failed', 'partial'] } })),
     AuditLog.countDocuments(tenantFilter(req, { module_name: 'compliance_export' })),
   ]);
-  const complianceScore = checklistTotal ? Math.round((checklistCompliant / checklistTotal) * 100) : 0;
-  res.json({ consents, signedConsents, incidentsOpen, incidentsHigh, sopsApproved, checklistTotal, checklistCompliant, complianceScore, backupFailed, auditExports });
+  const checklistPartial = await ComplianceChecklist.countDocuments(tenantFilter(req, { status: 'partial' }));
+  const weightedScore = checklistTotal ? Math.round(((checklistCompliant + (checklistPartial * 0.5)) / checklistTotal) * 100) : 0;
+  const complianceScore = weightedScore;
+  res.json({ consents, signedConsents, incidentsOpen, incidentsHigh, sopsApproved, checklistTotal, checklistCompliant, checklistPartial, complianceScore, backupFailed, auditExports });
 }));
 
 router.get('/compliance/consents', requirePermission('compliance.view'), asyncHandler(async (req, res) => {
@@ -93,6 +95,32 @@ router.put('/compliance/incidents/:id', requirePermission('compliance.manage'), 
   await updateAndAudit(req, res, IncidentReport, req.params.id, payload, { label: 'Incident report', entity: 'incident_report' });
 }));
 
+
+router.post('/compliance/incidents/:id/capa', requirePermission('compliance.manage'), asyncHandler(async (req, res) => {
+  const { root_cause, corrective_action, preventive_action, owner_name, due_date, status } = req.body || {};
+  if (!root_cause || !corrective_action || !preventive_action) return res.status(400).json({ message: 'Root cause, corrective action and preventive action are required' });
+  await updateAndAudit(req, res, IncidentReport, req.params.id, {
+    root_cause,
+    corrective_action,
+    preventive_action,
+    capa_owner_name: owner_name,
+    capa_due_date: due_date,
+    status: status || 'corrective_action',
+    capa_updated_at: new Date(),
+  }, { label: 'Incident CAPA', entity: 'incident_report' });
+}));
+
+router.post('/compliance/incidents/:id/evidence', requirePermission('compliance.manage'), asyncHandler(async (req, res) => {
+  const { title, url, notes } = req.body || {};
+  if (!title && !url) return res.status(400).json({ message: 'Evidence title or URL is required' });
+  const oldRow = await IncidentReport.findOne(tenantFilter(req, { id: Number(req.params.id) })).lean();
+  if (!oldRow) return res.status(404).json({ message: 'Incident report not found' });
+  const evidence = { title, url, notes, uploaded_by: req.user.id, uploaded_at: new Date() };
+  const row = await IncidentReport.findOneAndUpdate(tenantFilter(req, { id: Number(req.params.id) }), { $push: { attachments: evidence } }, { new: true }).lean();
+  await auditEvent({ req, action: 'Incident evidence added', module_name: 'compliance', entity_type: 'incident_report', entity_id: req.params.id, old_value: oldRow, new_value: row });
+  res.json(row);
+}));
+
 router.get('/compliance/sops', requirePermission('compliance.view'), asyncHandler(async (req, res) => {
   const rows = await SopDocument.find(textQuery(req, ['sop_number', 'title', 'department', 'category', 'owner_name'])).sort({ id: -1 }).limit(500).lean();
   res.json(rows);
@@ -121,6 +149,19 @@ router.post('/compliance/checklists', requirePermission('compliance.manage'), as
 
 router.put('/compliance/checklists/:id', requirePermission('compliance.manage'), asyncHandler(async (req, res) => {
   await updateAndAudit(req, res, ComplianceChecklist, req.params.id, { ...req.body, last_reviewed_at: new Date() }, { label: 'Compliance checklist item', entity: 'compliance_checklist' });
+}));
+
+
+router.post('/compliance/checklists/:id/evidence', requirePermission('compliance.manage'), asyncHandler(async (req, res) => {
+  const { evidence_url, evidence_notes, reviewed_by, status } = req.body || {};
+  if (!evidence_url && !evidence_notes) return res.status(400).json({ message: 'Evidence URL or notes are required' });
+  await updateAndAudit(req, res, ComplianceChecklist, req.params.id, {
+    evidence_url,
+    evidence_notes,
+    reviewed_by,
+    status: status || 'partial',
+    last_reviewed_at: new Date(),
+  }, { label: 'Compliance checklist evidence', entity: 'compliance_checklist' });
 }));
 
 router.post('/compliance/checklists/seed-nabh', requirePermission('compliance.manage'), asyncHandler(async (req, res) => {

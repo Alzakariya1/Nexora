@@ -1,6 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { Hospital, SaaSInvoice, SaaSPayment, SaaSPaymentIntent } = require('../models');
 const { PLAN_DEFINITIONS, getPlanId } = require('../utils/subscription');
 const { auditEvent, csvEscape } = require('../utils/audit');
@@ -83,11 +83,11 @@ async function invoicePayload(invoice) {
   return { ...invoice, payments };
 }
 
-router.get('/saas/billing/summary', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/saas/billing/summary', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   res.json(await invoiceSummary());
 }));
 
-router.get('/saas/invoices', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.get('/saas/invoices', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const query = {};
   if (req.query.hospital_id) query.hospital_id = Number(req.query.hospital_id);
   if (req.query.status && req.query.status !== 'all') query.status = req.query.status;
@@ -96,7 +96,7 @@ router.get('/saas/invoices', verifyToken, requirePermission('hospital.manage'), 
   res.json(withPayments);
 }));
 
-router.post('/saas/invoices/generate', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/invoices/generate', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospitalId = Number(req.body.hospital_id);
   const hospital = await Hospital.findOne({ id: hospitalId }).lean();
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
@@ -140,7 +140,7 @@ router.post('/saas/invoices/generate', verifyToken, requirePermission('hospital.
   res.status(201).json({ message: 'SaaS invoice generated', invoice: await invoicePayload(invoice.toJSON()) });
 }));
 
-router.patch('/saas/invoices/:id/status', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/saas/invoices/:id/status', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const invoice = await SaaSInvoice.findOne({ id: Number(req.params.id) });
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
   const oldValue = invoice.toJSON();
@@ -153,7 +153,7 @@ router.patch('/saas/invoices/:id/status', verifyToken, requirePermission('hospit
   res.json({ message: 'Invoice status updated', invoice: await invoicePayload(invoice.toJSON()) });
 }));
 
-router.post('/saas/invoices/:id/payments', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/invoices/:id/payments', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const invoice = await SaaSInvoice.findOne({ id: Number(req.params.id) });
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
   if (invoice.status === 'cancelled') return res.status(400).json({ message: 'Cannot record payment on a cancelled invoice' });
@@ -184,12 +184,12 @@ router.post('/saas/invoices/:id/payments', verifyToken, requirePermission('hospi
 }));
 
 
-router.post('/saas/invoices/mark-overdue', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/invoices/mark-overdue', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const updated = await markOverdueInvoices(req);
   res.json({ message: 'Overdue invoice scan completed', updated });
 }));
 
-router.post('/saas/invoices/:id/payment-link', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/invoices/:id/payment-link', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const invoice = await SaaSInvoice.findOne({ id: Number(req.params.id) });
   if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
   if (invoice.status === 'cancelled' || invoice.status === 'paid') return res.status(400).json({ message: 'Payment link is only available for unpaid active invoices' });
@@ -218,7 +218,7 @@ router.post('/saas/invoices/:id/payment-link', verifyToken, requirePermission('h
   res.status(201).json({ message: 'Payment link created', intent });
 }));
 
-router.get('/saas/payment-intents', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.get('/saas/payment-intents', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const query = {};
   if (req.query.invoice_id) query.invoice_id = Number(req.query.invoice_id);
   if (req.query.hospital_id) query.hospital_id = Number(req.query.hospital_id);
@@ -226,7 +226,7 @@ router.get('/saas/payment-intents', verifyToken, requirePermission('hospital.man
   res.json(await SaaSPaymentIntent.find(query).sort({ id: -1 }).limit(100).lean());
 }));
 
-router.post('/saas/payment-intents/:id/confirm', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/saas/payment-intents/:id/confirm', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const intent = await SaaSPaymentIntent.findOne({ id: Number(req.params.id) });
   if (!intent) return res.status(404).json({ message: 'Payment intent not found' });
   if (intent.status === 'paid') return res.status(400).json({ message: 'Payment intent already paid' });
@@ -256,7 +256,7 @@ router.post('/saas/payment-intents/:id/confirm', verifyToken, requirePermission(
   res.json({ message: 'Gateway payment confirmed', invoice: await invoicePayload(invoice.toJSON()), payment, intent });
 }));
 
-router.get('/saas/invoices/export.csv', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/saas/invoices/export.csv', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   const rows = await SaaSInvoice.find().sort({ id: -1 }).lean();
   const header = ['invoice_id', 'invoice_number', 'hospital_id', 'hospital_name', 'plan', 'billing_cycle', 'period_start', 'period_end', 'due_date', 'total_amount', 'paid_amount', 'balance_amount', 'status'];
   const csv = [header, ...rows.map((r) => [r.id, r.invoice_number, r.hospital_id, r.hospital_name, r.plan, r.billing_cycle, r.period_start, r.period_end, r.due_date, r.total_amount, r.paid_amount, r.balance_amount, r.status])].map((row) => row.map(csvEscape).join(',')).join('\n');
