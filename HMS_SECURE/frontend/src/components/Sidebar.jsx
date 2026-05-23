@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ChevronDown, LogOut, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
 
 const GROUP_META = {
   core: ["dashboard", "command", "patients", "doctors", "appointments", "beds"],
@@ -60,11 +60,6 @@ export default function Sidebar({ tabs, activeTab, onTabChange, onLogout }) {
         {renderGroup("Finance", "finance")}
         {renderGroup("Administration", "admin")}
       </div>
-
-      <button type="button" className="premiumPreviewCard" onClick={() => onTabChange("dashboard")}>
-        <SlidersHorizontal size={17} />
-        <div><h4>Customize Dashboard</h4><p>Shortcuts & widgets</p></div>
-      </button>
 
       <div className="sidebarFooter">
         <button type="button" onClick={onLogout} className="logoutBtn"><LogOut size={18} /><span>Logout</span></button>
