@@ -3962,3 +3962,12 @@ button.mini { padding: 7px 10px; border-radius: 10px; font-size: 12px; }
 .portalTab.active { background: var(--accent, #6146d9); color: #fff; border-color: var(--accent, #6146d9); box-shadow: 0 10px 24px color-mix(in srgb, var(--accent, #6146d9) 25%, transparent); }
 .portalStat small { color: var(--muted, #64748b); font-size: 12px; }
 .dangerText { color: #b91c1c; font-weight: 800; }
+
+.page-loader {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}

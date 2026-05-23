@@ -54,3 +54,7 @@ export { nursingApi } from './nursingApi';
 export { bloodBankApi } from './bloodBankApi';
 
 export { hrStaffApi } from './hrStaffApi';
+
+export { pacsApi } from './pacsApi';
+
+export { erpTallyApi } from './erpTallyApi';

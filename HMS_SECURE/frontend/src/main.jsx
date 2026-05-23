@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import {
@@ -59,51 +59,49 @@ import {
   ipdApi,
 } from "./api";
 import { AppLayout } from "./layouts";
-import {
-  AdminProfile,
-  Appointments,
-  Beds,
-  Billing,
-  Dashboard,
-  Doctors,
-  Labs,
-  Login,
-  Patients,
-  Pharmacy,
-  TenantControl,
-  AuditSecurity,
-  Configuration,
-  SaasControl,
-  Communications,
-  PatientPortal,
-  DoctorPortal,
-  EMR,
-  IPD,
-  InsuranceTPA,
-  Inventory,
-  ComplianceCenter,
-  IntegrationCenter,
-  CommandCenter,
-  Reports,
-  Nursing,
-  Emergency,
-  BloodBank,
-  HRStaff,
-  ProductionOps,
-  SalesDemoCenter,
-  LegalSecurityCenter,
-  AdvancedFeaturePage,
-  FHIRAPIs,
-  WhatsAppSMS,
-  HL7Ready,
-  PACSDicom,
-  Biometric,
-  ERPTally,
-  ABDMABHA,
-  TwoFactorSecurity,
-  AuditCompliance,
-PilotDeploymentCenter,
-} from "./pages";
+const AdminProfile = lazy(() => import("./pages/AdminProfile"));
+const Appointments = lazy(() => import("./pages/Appointments"));
+const Beds = lazy(() => import("./pages/Beds"));
+const Billing = lazy(() => import("./pages/Billing"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Doctors = lazy(() => import("./pages/Doctors"));
+const Labs = lazy(() => import("./pages/Labs"));
+const Login = lazy(() => import("./pages/Login"));
+const Patients = lazy(() => import("./pages/Patients"));
+const Pharmacy = lazy(() => import("./pages/Pharmacy"));
+const TenantControl = lazy(() => import("./pages/TenantControl"));
+const AuditSecurity = lazy(() => import("./pages/AuditSecurity"));
+const Configuration = lazy(() => import("./pages/Configuration"));
+const SaasControl = lazy(() => import("./pages/SaasControl"));
+const Communications = lazy(() => import("./pages/Communications"));
+const PatientPortal = lazy(() => import("./pages/PatientPortal"));
+const DoctorPortal = lazy(() => import("./pages/DoctorPortal"));
+const EMR = lazy(() => import("./pages/EMR"));
+const IPD = lazy(() => import("./pages/IPD"));
+const InsuranceTPA = lazy(() => import("./pages/InsuranceTPA"));
+const Inventory = lazy(() => import("./pages/Inventory"));
+const ComplianceCenter = lazy(() => import("./pages/ComplianceCenter"));
+const IntegrationCenter = lazy(() => import("./pages/IntegrationCenter"));
+const CommandCenter = lazy(() => import("./pages/CommandCenter"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Nursing = lazy(() => import("./pages/Nursing"));
+const Emergency = lazy(() => import("./pages/Emergency"));
+const BloodBank = lazy(() => import("./pages/BloodBank"));
+const HRStaff = lazy(() => import("./pages/HRStaff"));
+const ProductionOps = lazy(() => import("./pages/ProductionOps"));
+const SalesDemoCenter = lazy(() => import("./pages/SalesDemoCenter"));
+const LegalSecurityCenter = lazy(() => import("./pages/LegalSecurityCenter"));
+const AdvancedFeaturePage = lazy(() => import("./pages/AdvancedFeaturePage"));
+const FHIRAPIs = lazy(() => import("./pages/FHIRAPIs"));
+const WhatsAppSMS = lazy(() => import("./pages/WhatsAppSMS"));
+const HL7Ready = lazy(() => import("./pages/HL7Ready"));
+const PACSDicom = lazy(() => import("./pages/PACSDicom"));
+const Biometric = lazy(() => import("./pages/Biometric"));
+const ERPTally = lazy(() => import("./pages/ERPTally"));
+const ABDMABHA = lazy(() => import("./pages/ABDMABHA"));
+const TwoFactorSecurity = lazy(() => import("./pages/TwoFactorSecurity"));
+const AuditCompliance = lazy(() => import("./pages/AuditCompliance"));
+const PilotDeploymentCenter = lazy(() => import("./pages/PilotDeploymentCenter"));
 import { DEFAULT_ENABLED_MODULES, DEFAULT_FEATURE_FLAGS, filterTabsByPermissions, hasPermission, normalizeFeatureFlags } from "./utils";
 import "./style.css";
 
@@ -1437,6 +1435,7 @@ function App() {
           }
         }}
       >
+        <Suspense fallback={<div className="page-loader">Loading module...</div>}>
             {tab === "fhir" && <FHIRAPIs currentHospital={currentHospital} />}
             {tab === "whatsapp_sms" && <WhatsAppSMS currentHospital={currentHospital} />}
             {tab === "hl7" && <HL7Ready currentHospital={currentHospital} />}
@@ -1834,6 +1833,7 @@ function App() {
                 updateUserPermissions={updateUserPermissions}
               />
             )}
+        </Suspense>
       </AppLayout>
     </>
   );

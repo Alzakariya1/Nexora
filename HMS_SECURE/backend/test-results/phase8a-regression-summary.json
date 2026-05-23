@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-05-23T10:02:47.489Z",
+  "total": 24,
+  "passed": 24,
+  "failed": 0,
+  "results": [
+    {
+      "script": "check-routes",
+      "status": 0,
+      "durationMs": 2798
+    },
+    {
+      "script": "tenant:audit",
+      "status": 0,
+      "durationMs": 601
+    },
+    {
+      "script": "tenant:safety-check",
+      "status": 0,
+      "durationMs": 1879
+    },
+    {
+      "script": "check:plan-limits",
+      "status": 0,
+      "durationMs": 680
+    },
+    {
+      "script": "check:saas-onboarding",
+      "status": 0,
+      "durationMs": 684
+    },
+    {
+      "script": "check:tenant-backup-restore-export",
+      "status": 0,
+      "durationMs": 624
+    },
+    {
+      "script": "check:tenant-backup-restore-export-continuation",
+      "status": 0,
+      "durationMs": 601
+    },
+    {
+      "script": "check:phase5a-reports",
+      "status": 0,
+      "durationMs": 632
+    },
+    {
+      "script": "check:phase5b-reports",
+      "status": 0,
+      "durationMs": 651
+    },
+    {
+      "script": "check:phase5c-reports",
+      "status": 0,
+      "durationMs": 614
+    },
+    {
+      "script": "check:phase5d-command-center",
+      "status": 0,
+      "durationMs": 602
+    },
+    {
+      "script": "check:phase6a-ot-surgery",
+      "status": 0,
+      "durationMs": 623
+    },
+    {
+      "script": "check:phase6b-nursing",
+      "status": 0,
+      "durationMs": 602
+    },
+    {
+      "script": "check:phase6c-emergency",
+      "status": 0,
+      "durationMs": 608
+    },
+    {
+      "script": "check:phase6d-blood-bank",
+      "status": 0,
+      "durationMs": 628
+    },
+    {
+      "script": "check:phase6e-hr-staff",
+      "status": 0,
+      "durationMs": 640
+    },
+    {
+      "script": "check:phase6f-patient-portal",
+      "status": 0,
+      "durationMs": 597
+    },
+    {
+      "script": "check:phase6g-doctor-portal",
+      "status": 0,
+      "durationMs": 683
+    },
+    {
+      "script": "check:phase7a-fhir",
+      "status": 0,
+      "durationMs": 601
+    },
+    {
+      "script": "check:phase7b-hl7",
+      "status": 0,
+      "durationMs": 651
+    },
+    {
+      "script": "check:phase7c-pacs-dicom",
+      "status": 0,
+      "durationMs": 604
+    },
+    {
+      "script": "check:phase7d-abdm-abha",
+      "status": 0,
+      "durationMs": 617
+    },
+    {
+      "script": "check:phase7e-erp-tally",
+      "status": 0,
+      "durationMs": 615
+    },
+    {
+      "script": "check:phase7f-communications",
+      "status": 0,
+      "durationMs": 672
+    }
+  ]
+}

@@ -46,7 +46,19 @@
     "check:phase6e-hr-staff": "node scripts/phase6e-hr-staff-check.js",
     "check:phase6f-patient-portal": "node scripts/phase6f-patient-portal-check.js",
     "check:phase6g-doctor-portal": "node scripts/phase6g-doctor-portal-check.js",
-    "check:phase7a-fhir": "node scripts/phase7a-fhir-check.js"
+    "check:phase7a-fhir": "node scripts/phase7a-fhir-check.js",
+    "check:phase7b-hl7": "node scripts/phase7b-hl7-check.js",
+    "check:phase7c-pacs-dicom": "node scripts/phase7c-pacs-dicom-check.js",
+    "check:phase7d-abdm-abha": "node scripts/phase7d-abdm-abha-check.js",
+    "check:phase7e-erp-tally": "node scripts/phase7e-erp-tally-check.js",
+    "check:phase7f-communications": "node scripts/phase7f-communication-integrations-check.js",
+    "check:phase8a-automated-testing": "node scripts/phase8a-automated-testing-check.js",
+    "test:regression": "node scripts/run-regression-suite.js",
+    "test:automated": "npm run check-routes && npm run test:regression && npm run check:phase8a-automated-testing && npm run check:phase8b-frontend-testing && npm run check:phase8c-e2e && npm run check:phase8d-performance && npm run check:phase8e-production-readiness",
+    "check:phase8b-frontend-testing": "node scripts/phase8b-frontend-testing-check.js",
+    "check:phase8c-e2e": "node scripts/phase8c-e2e-testing-check.js",
+    "check:phase8d-performance": "node scripts/phase8d-performance-optimization-check.js",
+    "check:phase8e-production-readiness": "node scripts/phase8e-production-readiness-check.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

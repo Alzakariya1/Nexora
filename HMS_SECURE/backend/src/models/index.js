@@ -36,7 +36,9 @@ const TENANT_COLLECTIONS = new Set([
     "nursing_vitals", "medication_administrations", "nursing_handover_notes", "nursing_care_plans", "nursing_shift_tasks",
     "emergency_cases", "emergency_triage_notes", "emergency_clinical_notes", "emergency_transfers",
     "blood_donors", "blood_units", "blood_requisitions", "blood_cross_matches", "blood_issue_records", "blood_reservations",
-    "staff_profiles", "staff_attendance", "staff_shift_rosters", "staff_leave_requests", "staff_payroll_exports"
+    "staff_profiles", "staff_attendance", "staff_shift_rosters", "staff_leave_requests", "staff_payroll_exports",
+    "hl7_messages",
+    "abdm_consents", "abha_care_contexts"
 ]);
 function tenantAwareModel(model, name, schema, collection) {
     if (!TENANT_COLLECTIONS.has(collection)) return model;
@@ -1052,21 +1054,69 @@ const CommunicationLog = makeModel("CommunicationLog", "communication_logs", {
     recipient_id: String,
     recipient_name: String,
     recipient_contact: String,
+    contact_normalized: String,
     title: String,
     message: String,
+    template_key: String,
+    template_version: Number,
     module: { type: String, default: "system", index: true },
     entity_type: String,
     entity_id: String,
-    status: { type: String, default: "queued", index: true }, // queued, sent, failed, skipped
+    status: { type: String, default: "queued", index: true }, // queued, sent, delivered, read, failed, skipped, cancelled
     provider: String,
     provider_message_id: String,
+    provider_status: String,
+    provider_payload: { type: Object, default: {} },
     error_message: String,
-    scheduled_for: String,
+    scheduled_for: Date,
+    retry_count: { type: Number, default: 0 },
+    next_retry_at: Date,
+    delivered_at: Date,
+    read_at: Date,
     sent_at: Date,
+    consent_checked: { type: Boolean, default: false },
     created_by: Number,
 });
 CommunicationLog.schema.index({ hospital_id: 1, created_at: -1 }, { name: "communication_hospital_recent_lookup" });
 CommunicationLog.schema.index({ hospital_id: 1, channel: 1, status: 1 }, { name: "communication_channel_status_lookup" });
+CommunicationLog.schema.index({ hospital_id: 1, scheduled_for: 1, status: 1 }, { name: "communication_schedule_status_lookup" });
+CommunicationLog.schema.index({ hospital_id: 1, provider_message_id: 1 }, { name: "communication_provider_message_lookup", partialFilterExpression: { provider_message_id: { $type: "string" } } });
+
+const CommunicationTemplate = makeModel("CommunicationTemplate", "communication_templates", {
+    hospital_id: { type: Number, default: 1, index: true },
+    template_key: { type: String, required: true, trim: true },
+    name: String,
+    channel: { type: String, default: "in_app", index: true },
+    category: { type: String, default: "general", index: true },
+    title_template: String,
+    message_template: String,
+    variables: { type: [String], default: [] },
+    provider_template_id: String,
+    language: { type: String, default: "en" },
+    status: { type: String, default: "draft", index: true }, // draft, approved, disabled
+    version: { type: Number, default: 1 },
+    approval_notes: String,
+    created_by: Number,
+    updated_by: Number,
+});
+CommunicationTemplate.schema.index({ hospital_id: 1, template_key: 1, channel: 1 }, { unique: true, name: "communication_template_key_channel_unique", partialFilterExpression: { template_key: { $type: "string" } } });
+CommunicationTemplate.schema.index({ hospital_id: 1, status: 1, channel: 1 }, { name: "communication_template_status_channel_lookup" });
+
+const CommunicationRule = makeModel("CommunicationRule", "communication_rules", {
+    hospital_id: { type: Number, default: 1, index: true },
+    name: String,
+    event_type: { type: String, required: true, index: true }, // appointment_reminder, report_ready, payment_due, follow_up
+    channels: { type: [String], default: ["in_app"] },
+    template_key: String,
+    offset_minutes: { type: Number, default: 0 },
+    is_active: { type: Boolean, default: true, index: true },
+    audience: { type: String, default: "patient" },
+    module: { type: String, default: "system" },
+    conditions: { type: Object, default: {} },
+    created_by: Number,
+    updated_by: Number,
+});
+CommunicationRule.schema.index({ hospital_id: 1, event_type: 1, is_active: 1 }, { name: "communication_rule_event_lookup" });
 
 const ApiKey = makeModel("ApiKey", "api_keys", {
     hospital_id: { type: Number, default: 1, index: true },
@@ -1961,6 +2011,81 @@ const StaffPayrollExport = makeModel("StaffPayrollExport", "staff_payroll_export
     notes: String,
 });
 
+
+const HL7Message = makeModel("HL7Message", "hl7_messages", {
+    hospital_id: { type: Number, default: 1, index: true },
+    message_uid: { type: String, index: true },
+    message_type: { type: String, index: true },
+    trigger_event: String,
+    control_id: { type: String, index: true },
+    direction: { type: String, default: "outbound", index: true },
+    status: { type: String, default: "queued", index: true },
+    patient_id: Number,
+    appointment_id: Number,
+    lab_test_id: Number,
+    source_module: String,
+    endpoint: String,
+    raw_message: String,
+    parsed_payload: { type: Object, default: {} },
+    ack_code: String,
+    ack_message: String,
+    retry_count: { type: Number, default: 0 },
+    max_retries: { type: Number, default: 3 },
+    next_retry_at: Date,
+    last_error: String,
+    queued_at: Date,
+    sent_at: Date,
+    failed_at: Date,
+    processed_at: Date,
+    created_by: Number,
+});
+HL7Message.schema.index({ hospital_id: 1, control_id: 1 }, { name: "hl7_control_lookup" });
+HL7Message.schema.index({ hospital_id: 1, message_type: 1, status: 1 }, { name: "hl7_type_status_lookup" });
+
+const ABDMConsent = makeModel("ABDMConsent", "abdm_consents", {
+    hospital_id: { type: Number, default: 1, index: true },
+    consent_uid: { type: String, index: true },
+    patient_id: { type: String, index: true },
+    patient_ref_id: Number,
+    patient_name: String,
+    abha_masked: String,
+    abha_hash: { type: String, index: true },
+    purpose: String,
+    status: { type: String, default: "requested", index: true },
+    hiu_reference: String,
+    hip_reference: String,
+    consent_artefact_id: { type: String, index: true },
+    care_contexts: { type: [Object], default: [] },
+    requested_at: Date,
+    granted_at: Date,
+    revoked_at: Date,
+    expired_at: Date,
+    expires_at: Date,
+    notes: String,
+    created_by: Number,
+    updated_by: Number,
+});
+ABDMConsent.schema.index({ hospital_id: 1, patient_id: 1, status: 1 }, { name: "abdm_consent_patient_status_lookup" });
+ABDMConsent.schema.index({ hospital_id: 1, consent_uid: 1 }, { name: "abdm_consent_uid_lookup" });
+
+const ABHACareContext = makeModel("ABHACareContext", "abha_care_contexts", {
+    hospital_id: { type: Number, default: 1, index: true },
+    context_uid: { type: String, index: true },
+    patient_id: { type: String, index: true },
+    patient_ref_id: Number,
+    patient_name: String,
+    context_type: { type: String, index: true },
+    reference_id: String,
+    display: String,
+    status: { type: String, default: "linked", index: true },
+    consent_uid: String,
+    linked_at: Date,
+    linked_by: Number,
+    metadata: { type: Object, default: {} },
+});
+ABHACareContext.schema.index({ hospital_id: 1, patient_id: 1, context_type: 1 }, { name: "abha_context_patient_type_lookup" });
+ABHACareContext.schema.index({ hospital_id: 1, context_uid: 1 }, { name: "abha_context_uid_lookup" });
+
 module.exports = {
     Counter,
     User,
@@ -1990,6 +2115,8 @@ module.exports = {
     DynamicField,
     Template,
     Notification,
+    CommunicationTemplate,
+    CommunicationRule,
     SaaSPlan,
     SaaSInvoice,
     SaaSPayment,
@@ -2056,4 +2183,7 @@ module.exports = {
     StaffShiftRoster,
     StaffLeaveRequest,
     StaffPayrollExport,
+    HL7Message,
+    ABDMConsent,
+    ABHACareContext,
 };
