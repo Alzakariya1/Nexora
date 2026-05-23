@@ -4034,3 +4034,261 @@ main{margin-left:250px;width:calc(100% - 250px);}
 .topSearch{
  max-width:460px !important;
 }
+
+/* V49A-FIX: reference-aligned premium SaaS dashboard shell */
+:root {
+  --sidebar-width: 236px !important;
+  --sidebar: #ffffff !important;
+  --sidebar-active: #f2efff !important;
+  --bg: #f7f8fc !important;
+  --border: #e8edf5 !important;
+  --shadow: 0 18px 45px rgba(15, 23, 42, 0.06) !important;
+}
+body { overflow: hidden; }
+.app { background: var(--bg) !important; }
+.sidebarShell.premiumSidebar,
+aside.sidebarShell {
+  position: fixed !important;
+  inset: 0 auto 0 0 !important;
+  width: var(--sidebar-width) !important;
+  height: 100vh !important;
+  overflow: hidden !important;
+  padding: 18px 14px !important;
+  background: #ffffff !important;
+  color: #0b1739 !important;
+  border-right: 1px solid #e8edf5 !important;
+  box-shadow: 8px 0 32px rgba(15, 23, 42, 0.04) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+.brandBlock.nexoraBrand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 2px 0 18px !important;
+  border-bottom: 1px solid #eef2f7 !important;
+}
+.brandMark {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, var(--purple), #7557e6) !important;
+  color: #fff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 10px 22px rgba(91, 63, 180, .22) !important;
+}
+.brandText h2,
+.brandBlock h2 {
+  margin: 0 !important;
+  color: #101828 !important;
+  font-size: 17px !important;
+  line-height: 1.08 !important;
+  letter-spacing: -.02em !important;
+}
+.brandText small,
+.brandBlock small {
+  display: block !important;
+  color: #667085 !important;
+  font-size: 11px !important;
+}
+.sidebarScrollArea {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+.navGroup { margin: 0 !important; }
+.groupToggle {
+  min-height: 30px !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 7px 9px !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #7b879b !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .08em !important;
+}
+.groupToggle:hover { background: #f8fafc !important; color: #475467 !important; transform: none !important; }
+.sideNav {
+  display: grid !important;
+  gap: 4px !important;
+  margin: 2px 0 8px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+.sideNav button,
+aside .sideNav button,
+.logoutBtn {
+  min-height: 38px !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 0 12px !important;
+  border-radius: 11px !important;
+  background: transparent !important;
+  color: #344054 !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  box-shadow: none !important;
+  text-align: left !important;
+}
+.sideNav button span,
+.logoutBtn span {
+  font-size: 13px !important;
+  color: inherit !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.sideNav button svg,
+.logoutBtn svg { color: #53627a !important; flex: 0 0 auto !important; }
+.sideNav button:hover,
+.logoutBtn:hover { background: #f8fafc !important; color: var(--purple) !important; transform: none !important; }
+.sideNav button:hover svg,
+.logoutBtn:hover svg { color: var(--purple) !important; }
+.sideNav button.active,
+aside .sideNav button.active {
+  color: var(--purple) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--purple) 13%, #fff 87%), #ffffff) !important;
+  box-shadow: inset 3px 0 0 var(--purple) !important;
+}
+.sideNav button.active svg { color: var(--purple) !important; }
+.rotate { transform: rotate(180deg) !important; }
+.premiumPreviewCard {
+  width: 100% !important;
+  min-height: 52px !important;
+  margin: 8px 0 0 !important;
+  padding: 11px 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  border-radius: 13px !important;
+  border: 1px solid color-mix(in srgb, var(--purple) 18%, transparent) !important;
+  background: linear-gradient(135deg, #faf9ff, #ffffff) !important;
+  color: var(--purple) !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  flex: 0 0 auto !important;
+}
+.premiumPreviewCard h4 { margin: 0 !important; font-size: 12.5px !important; line-height: 1.1 !important; color: var(--purple) !important; }
+.premiumPreviewCard p { margin: 3px 0 0 !important; font-size: 10.5px !important; line-height: 1.2 !important; color: #667085 !important; }
+.sidebarFooter { margin-top: 0 !important; padding-top: 8px !important; border-top: 1px solid #eef2f7 !important; flex: 0 0 auto !important; }
+main {
+  margin-left: var(--sidebar-width) !important;
+  width: calc(100% - var(--sidebar-width)) !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  background: var(--bg) !important;
+}
+.mainContent { padding: 0 28px 34px !important; }
+.appHeader.premiumHeader,
+.appHeader,
+header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  margin: 0 -28px 22px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 8px 30px rgba(15,23,42,.04) !important;
+}
+.topBar {
+  min-height: 64px !important;
+  padding: 0 28px !important;
+  display: grid !important;
+  grid-template-columns: minmax(190px, 260px) minmax(320px, 520px) 1fr !important;
+  align-items: center !important;
+  gap: 18px !important;
+  background: #ffffff !important;
+  color: #0b1739 !important;
+  box-shadow: none !important;
+}
+.hospitalPlainName {
+  min-width: 0 !important;
+  color: #0b1739 !important;
+  font-size: 19px !important;
+  font-weight: 900 !important;
+  letter-spacing: -.03em !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.hospitalContextChip { display: none !important; }
+.topBarLeft { display: contents !important; }
+.topBarSearch {
+  width: 100% !important;
+  max-width: 520px !important;
+  height: 40px !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 0 12px !important;
+  border: 1px solid #dfe6f1 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  color: #7b879b !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04) !important;
+}
+.topBarSearch input { border: 0 !important; box-shadow: none !important; background: transparent !important; height: 100% !important; padding: 0 !important; font-size: 13.5px !important; }
+.topBarSearch input:focus { border: 0 !important; box-shadow: none !important; }
+.topBarSearch kbd { font-size: 10px !important; padding: 3px 7px !important; border-radius: 8px !important; color: #667085 !important; background: #f8fafc !important; }
+.topBarActions { justify-self: end !important; display: flex !important; align-items: center !important; gap: 14px !important; }
+.iconBtn { background: #f6f7fb !important; color: #344054 !important; border: 1px solid #e8edf5 !important; }
+.userChip.profileChip { background: transparent !important; color: #0b1739 !important; padding: 0 !important; gap: 10px !important; box-shadow: none !important; }
+.userChip.profileChip > span { width: 38px !important; height: 38px !important; color: #fff !important; background: var(--purple) !important; }
+.userChip b { color: #0b1739 !important; font-size: 13px !important; }
+.userChip small { color: #667085 !important; font-size: 11px !important; }
+.pageHeader {
+  min-height: 74px !important;
+  padding: 18px 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: #ffffff !important;
+}
+.pageHeader h1 { font-size: 27px !important; color: #0b1739 !important; }
+.headerMetrics { gap: 10px !important; }
+.headerMetrics span { background: #ffffff !important; border: 1px solid #e8edf5 !important; box-shadow: 0 8px 20px rgba(15,23,42,.04) !important; border-radius: 12px !important; padding: 10px 14px !important; color: #0b1739 !important; }
+.refreshBtn { background: var(--purple) !important; color: #fff !important; border-radius: 12px !important; padding: 11px 16px !important; }
+.quickPanel {
+  border-radius: 20px !important;
+  padding: 34px 38px !important;
+  min-height: 132px !important;
+  background: radial-gradient(circle at 84% 28%, rgba(255,255,255,.18), transparent 23%), linear-gradient(135deg, var(--purple) 0%, #684be0 52%, #4d8dff 100%) !important;
+  box-shadow: 0 22px 60px rgba(91, 63, 180, .18) !important;
+}
+.quickPanel h2 { font-size: 25px !important; }
+.stat { border-radius: 16px !important; min-height: 106px !important; box-shadow: var(--shadow) !important; }
+.dashboardTwoCol .card,
+.card,
+.tableWrap { border-radius: 16px !important; box-shadow: var(--shadow) !important; }
+@media (max-width: 1180px) {
+  :root { --sidebar-width: 210px !important; }
+  .topBar { grid-template-columns: minmax(150px, 220px) minmax(260px, 1fr) auto !important; }
+  .headerMetrics span { padding: 9px 10px !important; }
+}
+@media (max-width: 900px) {
+  :root { --sidebar-width: 82px !important; }
+  .sidebarShell.premiumSidebar, aside.sidebarShell { padding: 14px 8px !important; }
+  .brandText, .groupToggle span, .sideNav button span, .logoutBtn span, .premiumPreviewCard div { display: none !important; }
+  .brandBlock.nexoraBrand { justify-content: center !important; }
+  .groupToggle { justify-content: center !important; }
+  .sideNav button, .logoutBtn { justify-content: center !important; padding: 0 !important; }
+  .premiumPreviewCard { justify-content: center !important; }
+  .topBar { grid-template-columns: 1fr auto !important; min-height: auto !important; padding: 12px 16px !important; }
+  .hospitalPlainName { grid-column: 1 / -1 !important; font-size: 17px !important; }
+  .topBarSearch { max-width: none !important; }
+  .pageHeader { flex-direction: column !important; align-items: flex-start !important; }
+}
