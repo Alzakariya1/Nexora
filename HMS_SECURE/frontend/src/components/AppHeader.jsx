@@ -171,9 +171,9 @@ export default function AppHeader({
     <header className="appHeader">
       <div className="topBar">
         <div className="topBarLeft">
-          <div className="hospitalContextChip" title={hospitalName}>
+          <div className="hospitalPlainName" title={hospitalName}>
             <Building2 size={18} />
-            <span>{hospitalName}</span>
+            <strong>{hospitalName}</strong>
           </div>
         <div className="topBarSearch" ref={wrapRef}>
           <Search size={17} />
