@@ -29,10 +29,13 @@ import {
   FileHeart,
   PackageSearch,
   BarChart3,
+  LineChart,
   ServerCog,
   Presentation,
   Scale,
 Rocket,
+  Droplets,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
 import {
@@ -81,6 +84,11 @@ import {
   ComplianceCenter,
   IntegrationCenter,
   CommandCenter,
+  Reports,
+  Nursing,
+  Emergency,
+  BloodBank,
+  HRStaff,
   ProductionOps,
   SalesDemoCenter,
   LegalSecurityCenter,
@@ -1220,6 +1228,7 @@ function App() {
   const allTabs = [
     ["dashboard", "Dashboard", Activity],
     ["commandCenter", "Command Center", BarChart3],
+    ["reports", "Reports", LineChart],
     ["patients", "Patients", Users],
     ["doctors", "Doctors", Stethoscope],
     ["appointments", "Appointments", Calendar],
@@ -1228,6 +1237,10 @@ function App() {
     ["emr", "EMR / EHR", FileHeart],
     ["beds", "Beds", Bed],
     ["ipd", "IPD", Bed],
+    ["nursing", "Nursing", ClipboardCheck],
+    ["emergency", "Emergency", ShieldPlus],
+    ["bloodBank", "Blood Bank", Droplets],
+    ["hrStaff", "HR / Staff", BriefcaseBusiness],
     ["labs", "Lab/Radiology", TestTube2],
     ["pharmacy", "Pharmacy", Pill],
     ["inventory", "Inventory", PackageSearch],
@@ -1696,6 +1709,26 @@ function App() {
 
             {tab === "commandCenter" && (
               <CommandCenter />
+            )}
+
+            {tab === "reports" && (
+              <Reports />
+            )}
+
+            {tab === "nursing" && (
+              <Nursing />
+            )}
+
+            {tab === "emergency" && (
+              <Emergency />
+            )}
+
+            {tab === "bloodBank" && (
+              <BloodBank />
+            )}
+
+            {tab === "hrStaff" && (
+              <HRStaff />
             )}
 
             {tab === "operations" && (

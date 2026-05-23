@@ -109,12 +109,15 @@ router.patch('/tenants/:id/subscription', verifyToken, allowRoles('super_admin')
 }));
 
 
-router.patch('/tenants/:id/lifecycle', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/tenants/:id/lifecycle', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospitalId = Number(req.params.id);
   const hospital = await Hospital.findOne({ id: hospitalId });
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
 
   const action = String(req.body.action || '').toLowerCase();
+  if (Number(hospital.id) === DEFAULT_HOSPITAL_ID && ['suspend', 'cancel'].includes(action)) {
+    return res.status(400).json({ message: 'Default hospital cannot be suspended or cancelled' });
+  }
   const current = hospital.subscription || {};
   let update = {};
   if (action === 'activate') update = { status: 'active', suspended_at: null, cancelled_at: null };

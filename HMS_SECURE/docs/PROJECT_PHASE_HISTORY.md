@@ -1311,3 +1311,128 @@ npm run build
 
 ## Next Recommended Phase
 Phase 4D — SaaS Billing UI & Tenant Usage Dashboard.
+
+## Phase 4D — SaaS Billing UI & Tenant Usage Dashboard
+- Added commercial billing dashboard cards for collection rate, collected amount, outstanding dues and invoice status summary.
+- Added high-usage tenant risk panel.
+- Improved current tenant usage dashboard visibility with guardrail warnings.
+- Fixed SaaS lifecycle UI to call canonical lifecycle POST endpoint.
+- Hardened compatibility lifecycle route to super-admin only and protected default hospital from suspension/cancellation.
+- Checks passed: route load, tenant audit, tenant safety, plan limits, SaaS UI safety, frontend build.
+
+
+
+## Phase 4E — SaaS Invoice Automation & Dunning Readiness
+
+- Added due invoice generation endpoint.
+- Added dunning scan endpoint and dunning stages.
+- Added invoice automation metadata and duplicate-period guardrails.
+- Added communication and audit logging for SaaS billing automation.
+- Added SaaS billing automation readiness check.
+- Backend route load, tenant audits, plan limits, SaaS UI check, automation check, and frontend build passed.
+
+## Phase 4F — Payment Gateway Webhook Hardening & Invoice Reconciliation
+- Added signed SaaS payment gateway webhook endpoint.
+- Added webhook event persistence and idempotency protection.
+- Added gateway transaction dedupe and payment intent link uniqueness guardrails.
+- Added automatic invoice reconciliation from verified paid webhook events.
+- Added super-admin webhook event listing and manual invoice reconciliation endpoint.
+- Preserved existing invoice generation, dunning, payment link and dashboard flows.
+- Checks passed: backend route load, tenant audits, plan limits, SaaS UI, SaaS billing automation, webhook reconciliation and frontend production build.
+
+
+---
+
+## Phase 4G — Payment Gateway Provider Integration & Admin Settlement Reports
+
+### Implemented
+- Payment gateway provider adapter metadata for manual gateway-ready, Razorpay, Stripe and PayU.
+- Provider-aware SaaS payment links.
+- Gateway fee, net amount and settlement status tracking on SaaS payments.
+- SaaS settlement model and provider payout reconciliation workflow.
+- Admin settlement summary/list/export endpoints.
+- SaaS Control Center UI for provider readiness and settlement reports.
+- Regression script: `npm run check:saas-provider-settlements`.
+
+### Checks Passed
+- Backend route load
+- Tenant isolation audit
+- Tenant safety check
+- Plan limit guardrail check
+- SaaS UI safety check
+- SaaS billing automation check
+- SaaS webhook reconciliation check
+- SaaS provider integration and settlement reporting check
+- Frontend production build
+
+---
+
+## Source: `PHASE4H_SUBSCRIPTION_ANALYTICS_REVENUE_FORECASTING_CHURN_RISK_REPORT.md`
+
+# Phase 4H — Subscription Analytics, Revenue Forecasting & Churn Risk Signals
+
+- Added read-only super-admin subscription analytics endpoint.
+- Added MRR, ARR, at-risk MRR, collection health and overdue metrics.
+- Added six-month revenue forecasting.
+- Added churn risk signal scoring for tenant follow-up prioritisation.
+- Added frontend panels for subscription analytics and churn risk.
+- Added regression guard `npm run check:saas-subscription-analytics`.
+- Preserved existing SaaS billing, webhook and settlement flows.
+
+---
+
+# Phase 4N — Backup, Restore & Tenant Data Export Hardening
+
+## Status
+Completed.
+
+## Summary
+Closed the original Phase 4D roadmap gap by hardening tenant backup metadata, adding restore request workflow, tenant data export, export downloads and disaster recovery logs.
+
+## Regression Check Added
+- `npm run check:tenant-backup-restore-export`
+
+## Phase 5B — Revenue & Billing Reports
+- Added tenant-safe revenue and billing report endpoint.
+- Added daily revenue, payment mode, service type, doctor-wise and department-wise revenue metrics.
+- Added outstanding dues, insurance outstanding, discount and refund monitoring metrics.
+- Added Revenue & Billing tab in Reports UI.
+- Added `npm run check:phase5b-reports` regression check.
+
+---
+
+## Phase 6B — Nursing Module
+
+Completed in `V48_phase6B_nursing_module.zip`.
+
+Summary:
+- Added tenant-scoped Nursing Module backend foundation.
+- Added vitals charting, MAR, handovers, care plans and shift tasks.
+- Added Nursing workspace in frontend.
+- Added clinical permission checks and audit logging.
+- Regression checks and frontend build passed.
+
+---
+
+# Phase 6C — Emergency / Casualty Module
+
+Completed from baseline `V48_phase6B_nursing_module.zip`.
+
+Summary:
+- Emergency/casualty case registration foundation.
+- Triage categories, triage notes, vitals/red flags and critical queue tracking.
+- MLC support fields and audit-safe emergency actions.
+- Emergency clinical notes and transfer/admission workflow.
+- Billing link endpoint with existing billing permissions.
+- Emergency dashboard and frontend Emergency tab.
+- Tenant-scoped models, routes and regression check.
+
+Checks passed:
+- Full backend route, tenant, SaaS, reports, OT, nursing, emergency and frontend build checks.
+
+## Phase 6F — Patient Portal Upgrade
+- Upgraded existing Patient Portal instead of creating a duplicate portal.
+- Added patient self-service workspace for profile, appointments, OPD/prescriptions, reports, bills, documents and timeline.
+- Added segmented patient portal endpoints and own-data isolation guardrails.
+- Added audit logging for portal view and denied patient_id override attempts.
+- Added Patient Portal readiness regression check.

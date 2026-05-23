@@ -46,3 +46,11 @@ export { pilotApi } from './pilotApi';
 export { enterpriseFeatureApi } from './enterpriseFeatureApi';
 
 export { ipdApi } from "./ipdApi";
+
+export * from './reportApi';
+
+export { nursingApi } from './nursingApi';
+
+export { bloodBankApi } from './bloodBankApi';
+
+export { hrStaffApi } from './hrStaffApi';
