@@ -171,9 +171,9 @@ export default function AppHeader({
     <header className="appHeader">
       <div className="topBar">
         <div className="topBarLeft">
-          <div className="hospitalPlainName" title={hospitalName}>
+          <div className="hospitalContextChip" title={hospitalName}>
             <Building2 size={18} />
-            <strong>{hospitalName}</strong>
+            <span>{hospitalName}</span>
           </div>
         <div className="topBarSearch" ref={wrapRef}>
           <Search size={17} />
@@ -185,7 +185,7 @@ export default function AppHeader({
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            placeholder="Search patients, doctors or actions..."
+            placeholder="Search patients, doctors..."
             aria-label="Global search"
           />
           {query ? (

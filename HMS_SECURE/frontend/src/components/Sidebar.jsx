@@ -1,98 +1,67 @@
-import React, { useMemo, useState } from "react";
-import { ChevronDown, LogOut, SlidersHorizontal, Zap } from "lucide-react";
 
-const GROUPS = [
-  { key: "core", title: "Core", items: ["dashboard", "commandCenter", "reports"] },
-  { key: "operations", title: "Operations", items: ["patients", "doctors", "appointments", "beds", "ipd", "nursing", "emergency"] },
-  { key: "clinical", title: "Clinical", items: ["emr", "labs", "bloodBank", "patientPortal", "doctorPortal"] },
-  { key: "revenue", title: "Revenue & Stock", items: ["billing", "pharmacy", "inventory", "insurance_tpa"] },
-  { key: "admin", title: "Administration", items: ["hrStaff", "profile", "auditSecurity", "configuration", "compliance", "communications", "two_factor_auth", "audit_compliance"] },
-  { key: "enterprise", title: "Enterprise", items: ["operations", "saasControl", "salesDemo", "legalSecurity", "pilotDeployment", "tenants", "integration", "hl7", "pacs", "biometric", "erp", "whatsapp_sms", "abdm_abha"] },
-];
+import React, { useState } from "react";
+import { ChevronDown, LogOut } from "lucide-react";
 
-export default function Sidebar({ tabs = [], activeTab, onTabChange, onLogout }) {
-  const [openGroups, setOpenGroups] = useState(() => new Set(["core", "operations", "clinical", "revenue"]));
+export default function Sidebar({ tabs, activeTab, onTabChange, onLogout }) {
+  const [openGroups, setOpenGroups] = useState({
+    operations: true,
+    management: false,
+    portals: false,
+  });
 
-  const groupedTabs = useMemo(() => {
-    const tabMap = new Map(tabs.map((tab) => [tab[0], tab]));
-    const used = new Set();
-    const groups = GROUPS.map((group) => {
-      const items = group.items.map((id) => tabMap.get(id)).filter(Boolean);
-      items.forEach(([id]) => used.add(id));
-      return { ...group, items };
-    }).filter((group) => group.items.length);
-    const remaining = tabs.filter(([id]) => !used.has(id));
-    if (remaining.length) groups.push({ key: "more", title: "More", items: remaining });
-    return groups;
-  }, [tabs]);
+  const groups = {
+    operations: tabs.slice(0, 6),
+    management: tabs.slice(6, 10),
+    portals: tabs.slice(10),
+  };
 
-  function toggleGroup(key) {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }
+  const renderGroup = (title, key) => (
+    <div className="navGroup">
+      <button
+        className="groupToggle"
+        type="button"
+        onClick={() => setOpenGroups((p) => ({ ...p, [key]: !p[key] }))}
+      >
+        <span>{title}</span>
+        <ChevronDown size={16} className={openGroups[key] ? "rotate" : ""} />
+      </button>
 
-  function selectTab(id) {
-    onTabChange(id);
-  }
+      {openGroups[key] && (
+        <nav className="sideNav">
+          {groups[key].map(([id, label, Icon]) => (
+            <button
+              type="button"
+              className={activeTab === id ? "active" : ""}
+              onClick={() => onTabChange(id)}
+              key={id}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
 
   return (
     <aside className="sidebarShell premiumSidebar">
       <div className="brandBlock nexoraBrand">
         <div className="brandMark">N</div>
-        <div>
+        <div className="brandText">
           <h2>Nexora</h2>
           <small>Hospital Suite</small>
         </div>
       </div>
 
-      <nav className="sideNav groupedSideNav" aria-label="Main navigation">
-        {groupedTabs.map((group) => {
-          const expanded = openGroups.has(group.key);
-          const activeInside = group.items.some(([id]) => id === activeTab);
-          return (
-            <section className={`navGroup ${activeInside ? "activeGroup" : ""}`} key={group.key}>
-              <button
-                type="button"
-                className="navGroupToggle"
-                onClick={() => toggleGroup(group.key)}
-                aria-expanded={expanded}
-              >
-                <span>{group.title}</span>
-                <ChevronDown size={14} className={expanded ? "rotate" : ""} />
-              </button>
-              {expanded ? (
-                <div className="navGroupItems">
-                  {group.items.map(([id, label, Icon]) => (
-                    <button
-                      type="button"
-                      className={activeTab === id ? "active" : ""}
-                      onClick={() => selectTab(id)}
-                      key={id}
-                      title={label}
-                    >
-                      <Icon size={17} />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </nav>
+      {renderGroup("OPERATIONS", "operations")}
+      {renderGroup("MANAGEMENT", "management")}
+      {renderGroup("PORTALS", "portals")}
 
-      <button type="button" className="sidebarPreviewCard" onClick={() => onTabChange("commandCenter")}> 
-        <Zap size={16} />
-        <span><b>Quick Actions</b><small>Command center shortcuts</small></span>
-      </button>
-
-      <button type="button" className="sidebarCustomize" onClick={() => onTabChange("configuration")}> 
-        <SlidersHorizontal size={16} />
-        <span>Customize Dashboard</span>
-      </button>
+      <div className="premiumPreviewCard">
+        <h4>Quick Actions</h4>
+        <p>Access frequent HMS workflows instantly.</p>
+      </div>
 
       <div className="sidebarFooter">
         <button type="button" onClick={onLogout} className="logoutBtn">
