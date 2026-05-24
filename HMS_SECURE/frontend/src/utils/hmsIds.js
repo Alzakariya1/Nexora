@@ -4,7 +4,10 @@ export function cleanId(value) {
 }
 
 export function getDoctorPublicId(doctor = {}) {
-  return cleanId(doctor.public_id || doctor.id || doctor.doctor_id);
+  // Prefer the business/public doctor_id for API calls.
+  // Numeric database id can collide across tenants or become stale in UI state,
+  // which can make document uploads hit /doctors/2/documents and return Doctor not found.
+  return cleanId(doctor.doctor_id || doctor.public_id || doctor.id || doctor._id);
 }
 
 export function getPatientPublicId(patient = {}) {
@@ -15,7 +18,7 @@ export function findDoctorByAnyId(doctors = [], identifier) {
   const id = cleanId(identifier);
   if (!id) return null;
   return doctors.find((doctor) => {
-    const values = [doctor.public_id, doctor.id, doctor.doctor_id, doctor._id].map(cleanId).filter(Boolean);
+    const values = [doctor.doctor_id, doctor.public_id, doctor.id, doctor._id].map(cleanId).filter(Boolean);
     return values.includes(id);
   }) || null;
 }

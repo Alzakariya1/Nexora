@@ -57,7 +57,7 @@ export default function Doctors({
   }
 
   function getStableDoctorId(row = selectedDoctor) {
-    const lookupValue = row?.public_id || row?.id || row?.doctor_id || row?._id;
+    const lookupValue = row?.doctor_id || row?.public_id || row?.id || row?._id;
     const latestDoctor = findDoctorByAnyId(paginatedDoctors || [], lookupValue) || row || selectedDoctor || {};
     return getDoctorPublicId(latestDoctor) || cleanId(latestDoctor._id) || cleanId(lookupValue);
   }

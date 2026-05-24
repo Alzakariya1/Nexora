@@ -244,19 +244,28 @@ function totalDueAmount(bills = []) {
     return bills.reduce((sum, bill) => sum + Number(bill.due_amount ?? Math.max(Number(bill.total_amount || bill.amount || 0) - Number(bill.paid_amount || 0), 0)), 0);
 }
 
+async function safeTimelineQuery(label, queryPromise) {
+    try {
+        return await queryPromise;
+    } catch (error) {
+        console.warn(`Patient timeline section skipped (${label}):`, error?.message || error);
+        return [];
+    }
+}
+
 async function buildPatientTimeline(req, patient) {
-        const [appointments, opdRecords, prescriptions, bills, labTests, radiologyTests, admissions, pharmacySales, clinicalRecords, insuranceClaims, nursingNotes] = await Promise.all([
-        Appointment.find(timelineFilter(req, patient, notArchivedFilter())).sort({ appointment_date: -1, appointment_time: -1, id: -1 }).lean(),
-        OpdRecord.find(timelineFilter(req, patient, notArchivedFilter())).sort({ visit_date: -1, created_at: -1, id: -1 }).lean(),
-        Prescription.find(timelineFilter(req, patient, { status: { $ne: 'archived' } })).sort({ visit_date: -1, created_at: -1, id: -1 }).lean(),
-        Billing.find(timelineFilter(req, patient, notArchivedFilter())).sort({ billing_date: -1, created_at: -1, id: -1 }).lean(),
-        LabTest.find(timelineFilter(req, patient, { test_status: { $nin: ['archived', 'deleted'] } })).sort({ created_at: -1, id: -1 }).lean(),
-        RadiologyTest.find(timelineFilter(req, patient, { status: { $nin: ['archived', 'deleted'] } })).sort({ created_at: -1, id: -1 }).lean(),
-        IpdAdmission.find(timelineFilter(req, patient, notArchivedFilter())).sort({ admission_date: -1, created_at: -1, id: -1 }).lean(),
-        PharmacySale.find(timelineFilter(req, patient, notArchivedFilter())).sort({ sold_at: -1, created_at: -1, id: -1 }).lean(),
-        ClinicalRecord.find(timelineFilter(req, patient, { status: { $ne: 'archived' } })).sort({ record_date: -1, created_at: -1, id: -1 }).lean(),
-        InsuranceClaim.find(timelineFilter(req, patient)).sort({ created_at: -1, id: -1 }).lean(),
-        NursingNote.find(timelineFilter(req, patient)).sort({ note_date: -1, created_at: -1, id: -1 }).lean(),
+    const [appointments, opdRecords, prescriptions, bills, labTests, radiologyTests, admissions, pharmacySales, clinicalRecords, insuranceClaims, nursingNotes] = await Promise.all([
+        safeTimelineQuery('appointments', Appointment.find(timelineFilter(req, patient, notArchivedFilter())).sort({ appointment_date: -1, appointment_time: -1, id: -1 }).lean()),
+        safeTimelineQuery('opdRecords', OpdRecord.find(timelineFilter(req, patient, notArchivedFilter())).sort({ visit_date: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('prescriptions', Prescription.find(timelineFilter(req, patient, { status: { $ne: 'archived' } })).sort({ visit_date: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('bills', Billing.find(timelineFilter(req, patient, notArchivedFilter())).sort({ billing_date: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('labTests', LabTest.find(timelineFilter(req, patient, { test_status: { $nin: ['archived', 'deleted'] } })).sort({ created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('radiologyTests', RadiologyTest.find(timelineFilter(req, patient, { status: { $nin: ['archived', 'deleted'] } })).sort({ created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('admissions', IpdAdmission.find(timelineFilter(req, patient, notArchivedFilter())).sort({ admission_date: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('pharmacySales', PharmacySale.find(timelineFilter(req, patient, notArchivedFilter())).sort({ sold_at: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('clinicalRecords', ClinicalRecord.find(timelineFilter(req, patient, { status: { $ne: 'archived' } })).sort({ record_date: -1, created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('insuranceClaims', InsuranceClaim.find(timelineFilter(req, patient)).sort({ created_at: -1, id: -1 }).lean()),
+        safeTimelineQuery('nursingNotes', NursingNote.find(timelineFilter(req, patient)).sort({ note_date: -1, created_at: -1, id: -1 }).lean()),
     ]);
 
     const documents = (patient.documents || []).filter((doc) => !doc.deleted_at).map((doc, index) => formatTimelineItem(
@@ -354,8 +363,17 @@ router.get(
     asyncHandler(async (req, res) => {
         const patient = await findPatientByPublicId(req, req.params.id).lean();
         if (!patient) return res.status(404).json({ message: "Patient not found" });
-        await auditEvent({ req, action: 'patient.timeline.viewed', module_name: 'patients', entity_type: 'Patient', entity_id: patient.id, severity: 'info', metadata: { patient_id: patient.patient_id, patient_uid: patient.patient_uid } });
-        res.json(await buildPatientTimeline(req, patient));
+        try {
+            await auditEvent({ req, action: 'patient.timeline.viewed', module_name: 'patients', entity_type: 'Patient', entity_id: patient.id, severity: 'info', metadata: { patient_id: patient.patient_id, patient_uid: patient.patient_uid } });
+        } catch (error) {
+            console.warn('Patient timeline audit skipped:', error?.message || error);
+        }
+        try {
+            res.json(await buildPatientTimeline(req, patient));
+        } catch (error) {
+            console.error('Patient timeline failed:', error);
+            res.status(500).json({ message: error?.message || 'Patient timeline failed' });
+        }
     }),
 );
 router.get(

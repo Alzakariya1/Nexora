@@ -438,6 +438,8 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
         req.params.id,
         req.body?.doctor_id,
         req.body?.doctor_code,
+        req.body?.public_id,
+        req.body?.numeric_id,
         req.body?.mongo_id,
     ].filter((value, index, arr) => value !== undefined && value !== null && String(value).trim() !== '' && arr.findIndex(v => String(v).trim() === String(value).trim()) === index);
 
@@ -508,6 +510,8 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
 
         doctor.certificates = doctor.certificates || [];
         doctor.certificates.push(newDoc);
+        // Keep documents alias in sync for older UI screens that read doctor.documents.
+        doctor.documents = doctor.certificates;
         await doctor.save();
         await auditEvent({ req, action: 'doctor.document_uploaded', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, new_value: { title: newDoc.title, category: newDoc.category, document_type: newDoc.document_type, storage } });
 
@@ -515,6 +519,7 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
             message: storage === 'cloudinary' ? 'Doctor document uploaded successfully' : 'Doctor document saved successfully. Cloudinary is not configured, so the file was stored in MongoDB.',
             document: newDoc,
             certificates: doctor.certificates,
+            documents: doctor.certificates,
             doctor: doctor.toJSON(),
         });
     } catch (error) {
@@ -540,12 +545,14 @@ router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.docu
         await safelyDestroyCloudinary(doc.file_public_id, 'auto');
 
         doctor.certificates.splice(docIndex, 1);
+        doctor.documents = doctor.certificates;
         await doctor.save();
         await auditEvent({ req, action: 'doctor.document_deleted', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, old_value: { title: doc.title, category: doc.category, document_type: doc.document_type } });
 
         res.json({
             message: 'Doctor document deleted successfully',
             certificates: doctor.certificates,
+            documents: doctor.certificates,
             doctor: doctor.toJSON(),
         });
     } catch (error) {

@@ -695,12 +695,14 @@ function App() {
       formData.append("document_type", payload.document_type || "Certificate");
       formData.append("category", payload.category || "credential");
       formData.append("notes", payload.notes || "");
-      formData.append("doctor_id", stableDoctorId);
-      if (resolvedDoctor?.doctor_id) formData.append("doctor_code", resolvedDoctor.doctor_id);
+      formData.append("doctor_id", resolvedDoctor?.doctor_id || stableDoctorId);
+      formData.append("doctor_code", resolvedDoctor?.doctor_id || stableDoctorId);
+      if (resolvedDoctor?.id) formData.append("numeric_id", resolvedDoctor.id);
+      if (resolvedDoctor?.public_id) formData.append("public_id", resolvedDoctor.public_id);
       if (resolvedDoctor?._id) formData.append("mongo_id", resolvedDoctor._id);
 
       const { data } = await doctorApi.uploadDocument(stableDoctorId, formData);
-      const refreshed = await doctorApi.get(stableDoctorId);
+      const refreshed = data?.doctor ? { data: data.doctor } : await doctorApi.get(stableDoctorId);
 
       setSelectedDoctor(refreshed.data);
       await load();
@@ -718,7 +720,7 @@ function App() {
 
     try {
       const { data } = await doctorApi.deleteDocument(stableDoctorId, docIndex);
-      const refreshed = await doctorApi.get(stableDoctorId);
+      const refreshed = data?.doctor ? { data: data.doctor } : await doctorApi.get(stableDoctorId);
 
       setSelectedDoctor(refreshed.data);
       await load();
