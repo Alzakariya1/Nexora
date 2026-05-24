@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { verifyToken, requirePermission } = require('../middleware/auth');
 const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/tenant');
 const { createLowStockNotification, createNotification } = require('../utils/notifications');
+const { normalizeClinicalReferences } = require('../utils/refResolver');
 
 const router = express.Router();
 router.use(verifyToken, attachTenant);
@@ -169,6 +170,7 @@ async function createSale(req, res) {
   const current = number(med.quantity ?? med.stock, 0);
   if (current < qty) return res.status(400).json({ message: 'Insufficient stock' });
 
+  const refs = await normalizeClinicalReferences(req, b, { requirePatient: Boolean(b.patient_id || b.appointment_id), requireDoctor: false });
   const sellingPrice = number(b.selling_price ?? med.selling_price ?? med.price, 0);
   const total = qty * sellingPrice;
   const r = await PharmacySale.create(tenantCreateData(req, {
@@ -176,6 +178,12 @@ async function createSale(req, res) {
     sale_number: `PH-${Date.now()}`,
     medicine_id: med.id,
     medicine_name: med.name,
+    patient_id: refs.normalized.patient_id || b.patient_id || '',
+    patient_uid: refs.normalized.patient_uid || '',
+    patient_name: refs.normalized.patient_name || '',
+    doctor_id: refs.normalized.doctor_id || b.doctor_id || '',
+    doctor_name: refs.normalized.doctor_name || '',
+    appointment_id: refs.normalized.appointment_id,
     quantity: qty,
     selling_price: sellingPrice,
     total_amount: total,

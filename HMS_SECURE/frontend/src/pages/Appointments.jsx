@@ -26,6 +26,14 @@ const WEEK_DAYS = [
   { value: "sun", label: "Sun" },
 ];
 
+
+function displayToken(row) {
+  const raw = String(row?.token_number || row?.id || "-");
+  if (raw.includes("-")) return raw;
+  const dateKey = String(row?.appointment_date || "").replaceAll("-", "");
+  return dateKey ? `${dateKey}-${raw.padStart(3, "0")}` : raw.padStart(3, "0");
+}
+
 function statusLabel(status = "scheduled") {
   return STATUS_OPTIONS.find((item) => item.value === status)?.label || status;
 }
@@ -124,7 +132,7 @@ export default function Appointments({
   }, [filteredAppointments, today]);
 
   const queueRows = useMemo(() => {
-    const tokenValue = (row) => Number(String(row.token_number || "").replace(/\D/g, "")) || Number(row.id || 0);
+    const tokenValue = (row) => Number(row.token_sequence || 0) || Number(String(row.token_number || "").split("-").pop()?.replace(/\D/g, "")) || Number(row.id || 0);
     return (filteredAppointments || [])
       .filter((a) => (a.appointment_date || "") === today)
       .filter((a) => ["scheduled", "checked_in", "in_consultation"].includes(a.status || "scheduled"))
@@ -291,7 +299,7 @@ export default function Appointments({
                 <article className={`queueCard queueCard-${a.status || "scheduled"}`} key={a.id || a._id}>
                   <div className="queueToken">
                     <small>#{a.queue_position}</small>
-                    <strong>{a.token_number || String(a.id || "-").padStart(3, "0")}</strong>
+                    <strong>{displayToken(a)}</strong>
                   </div>
                   <div className="queuePatient">
                     <h3>{a.patient_name || a.patient_id || "Unknown Patient"}</h3>
@@ -449,7 +457,7 @@ export default function Appointments({
               <select required value={appointment.doctor_id || ""} onChange={(e) => handleField("doctor_id", e.target.value)}>
                 <option value="">Select doctor</option>
                 {doctors.map((doctor) => (
-                  <option key={doctor.id || doctor.doctor_id} value={doctor.doctor_id || doctor.id}>{doctorLabel(doctor)}</option>
+                  <option key={doctor.id || doctor.doctor_id} value={doctor.id || doctor.doctor_id}>{doctorLabel(doctor)}</option>
                 ))}
               </select>
             </label>
@@ -497,7 +505,7 @@ export default function Appointments({
           <div className="sectionTitleRow">
             <div>
               <h2>OPD Consultation</h2>
-              <p className="muted">{consultationFor.patient_name || consultationFor.patient_id} · {consultationFor.doctor_name || consultationFor.doctor_id} · Token {consultationFor.token_number || consultationFor.id}</p>
+              <p className="muted">{consultationFor.patient_name || consultationFor.patient_id} · {consultationFor.doctor_name || consultationFor.doctor_id} · Token {displayToken(consultationFor)}</p>
             </div>
             <button type="button" className="ghostBtn" onClick={() => setConsultationFor(null)}>Close</button>
           </div>
@@ -601,7 +609,7 @@ export default function Appointments({
                 <article className="appointmentCard" key={a.id || a._id}>
                   <div className="tokenBox">
                     <span>Token</span>
-                    <strong>{a.token_number || String(a.id || "-").padStart(3, "0")}</strong>
+                    <strong>{displayToken(a)}</strong>
                   </div>
 
                   <div className="appointmentPeople">

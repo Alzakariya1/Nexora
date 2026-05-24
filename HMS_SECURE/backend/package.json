@@ -58,7 +58,13 @@
     "check:phase8b-frontend-testing": "node scripts/phase8b-frontend-testing-check.js",
     "check:phase8c-e2e": "node scripts/phase8c-e2e-testing-check.js",
     "check:phase8d-performance": "node scripts/phase8d-performance-optimization-check.js",
-    "check:phase8e-production-readiness": "node scripts/phase8e-production-readiness-check.js"
+    "check:phase8e-production-readiness": "node scripts/phase8e-production-readiness-check.js",
+    "stabilize:ids-tokens": "node scripts/stabilize-ids-and-tokens.js",
+    "phase2:appointments": "node scripts/phase2-appointment-token-engine.js",
+    "phase3:data-consistency": "node scripts/phase3-data-consistency.js",
+    "phase4:appointment-workflow": "node scripts/phase4-appointment-workflow.js",
+    "phase5:patients": "node scripts/phase5-patient-data-consistency.js",
+    "phase6:clinical-modules": "node scripts/phase6-clinical-modules-consistency.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,5 +1,6 @@
 const express = require("express");
 const { Patient, Appointment, OpdRecord, Prescription, Billing, LabTest, RadiologyTest, IpdAdmission, DynamicField, PharmacySale, ClinicalRecord, InsuranceClaim, NursingNote } = require("../models");
+const { mongoose } = require("../config/db");
 const asyncHandler = require("../utils/asyncHandler");
 const { verifyToken, requirePermission } = require("../middleware/auth");
 const { attachTenant, tenantFilter, tenantCreateData } = require("../middleware/tenant");
@@ -64,6 +65,32 @@ function activePatientFilter(req, extra = {}) {
             { deleted_at: { $exists: false } },
         ],
     };
+}
+
+
+function patientLookupFilter(req, identifier) {
+    const raw = cleanString(identifier);
+    if (!raw) return activePatientFilter(req, { id: -1 });
+    const or = [];
+    const numericId = Number(raw);
+    if (Number.isFinite(numericId)) or.push({ id: numericId });
+    or.push({ patient_id: raw }, { patient_uid: raw });
+    if (mongoose.Types.ObjectId.isValid(raw)) or.push({ _id: raw });
+    return activePatientFilter(req, { $or: or });
+}
+
+async function findPatientByPublicId(req, identifier, projection = null) {
+    const query = Patient.findOne(patientLookupFilter(req, identifier));
+    if (projection) query.select(projection);
+    return query;
+}
+
+function normalizePatientResponse(patient) {
+    if (!patient) return patient;
+    const plain = patient.toJSON ? patient.toJSON() : { ...patient };
+    plain.public_id = String(plain.id || plain.patient_id || plain.patient_uid || '');
+    plain.documents = Array.isArray(plain.documents) ? plain.documents.filter((doc) => !doc?.deleted_at) : [];
+    return plain;
 }
 
 function validatePatientPayload(body = {}, { partial = false } = {}) {
@@ -305,9 +332,10 @@ async function buildPatientTimeline(req, patient) {
 router.get(
     "/",
     requirePermission("patient.view"),
-    asyncHandler(async (req, res) =>
-        res.json(await Patient.find(activePatientFilter(req)).sort({ id: -1 })),
-    ),
+    asyncHandler(async (req, res) => {
+        const rows = await Patient.find(activePatientFilter(req)).sort({ id: -1 });
+        res.json(rows.map(normalizePatientResponse));
+    }),
 );
 
 router.get(
@@ -324,7 +352,7 @@ router.get(
     "/:id/timeline",
     requirePermission("patient.view"),
     asyncHandler(async (req, res) => {
-        const patient = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) })).lean();
+        const patient = await findPatientByPublicId(req, req.params.id).lean();
         if (!patient) return res.status(404).json({ message: "Patient not found" });
         await auditEvent({ req, action: 'patient.timeline.viewed', module_name: 'patients', entity_type: 'Patient', entity_id: patient.id, severity: 'info', metadata: { patient_id: patient.patient_id, patient_uid: patient.patient_uid } });
         res.json(await buildPatientTimeline(req, patient));
@@ -334,10 +362,10 @@ router.get(
     "/:id",
     requirePermission("patient.view"),
     asyncHandler(async (req, res) => {
-        const r = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) }));
+        const r = await findPatientByPublicId(req, req.params.id);
         if (!r) return res.status(404).json({ message: "Patient not found" });
         await auditEvent({ req, action: 'patient.viewed', module_name: 'patients', entity_type: 'Patient', entity_id: r.id, severity: 'info', metadata: { patient_id: r.patient_id, patient_uid: r.patient_uid } });
-        res.json(r);
+        res.json(normalizePatientResponse(r));
     }),
 );
 router.post(
@@ -365,7 +393,7 @@ router.post(
             const duplicateWarnings = await findPotentialDuplicatePatients(req, payload);
             const r = await Patient.create(tenantCreateData(req, payload));
             await auditEvent({ req, action: 'patient.created', module_name: 'patients', entity_type: 'Patient', entity_id: r.id, new_value: r.toJSON?.() || r });
-            res.status(201).json({ message: "Patient created", id: r.id, patient_uid: uid, patient: r.toJSON?.() || r, duplicate_warnings: duplicateWarnings });
+            res.status(201).json({ message: "Patient created", id: r.id, public_id: String(r.id), patient_uid: uid, patient: normalizePatientResponse(r), duplicate_warnings: duplicateWarnings });
         } catch (error) {
             if (error?.code === 11000) {
                 return res.status(409).json({
@@ -408,9 +436,9 @@ router.put(
         if (!Object.keys(update).length)
             return res.status(400).json({ message: "No valid fields to update" });
 
-        const patientNumericId = Number(req.params.id);
-        const existingPatient = await Patient.findOne(activePatientFilter(req, { id: patientNumericId })).lean();
+        const existingPatient = await findPatientByPublicId(req, req.params.id).lean();
         if (!existingPatient) return res.status(404).json({ message: "Patient not found" });
+        const patientNumericId = Number(existingPatient.id);
 
         if (Object.prototype.hasOwnProperty.call(update, 'patient_id')) {
             if (!update.patient_id) delete update.patient_id;
@@ -435,12 +463,12 @@ router.put(
 
         try {
             const updated = await Patient.findOneAndUpdate(
-                activePatientFilter(req, { id: patientNumericId }),
+                patientLookupFilter(req, req.params.id),
                 { $set: update },
                 { new: true, runValidators: true },
             ).lean();
             await auditEvent({ req, action: 'patient.updated', module_name: 'patients', entity_type: 'Patient', entity_id: patientNumericId, old_value: existingPatient, new_value: updated, reason: req.body.reason || req.body.edit_reason || null, metadata: { sensitive_fields: changedSensitiveFields } });
-            res.json({ message: "Patient updated", patient: updated, duplicate_warnings: await findPotentialDuplicatePatients(req, { ...existingPatient, ...update }, patientNumericId) });
+            res.json({ message: "Patient updated", id: updated?.id || patientNumericId, public_id: String(updated?.id || patientNumericId), patient: normalizePatientResponse(updated), duplicate_warnings: await findPotentialDuplicatePatients(req, { ...existingPatient, ...update }, patientNumericId) });
         } catch (error) {
             if (error?.code === 11000) {
                 return res.status(409).json({
@@ -456,7 +484,7 @@ router.post(
     requirePermission("patient.document.manage"),
     upload.single("document"),
     asyncHandler(async (req, res) => {
-        const patient = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) }));
+        const patient = await findPatientByPublicId(req, req.params.id);
 
         if (!patient) {
             return res.status(404).json({ message: "Patient not found" });
@@ -505,7 +533,7 @@ router.post(
         res.status(201).json({
             message: storage === "cloudinary" ? "Document uploaded successfully" : "Document saved successfully. Cloudinary is not configured, so the file was stored in MongoDB.",
             document: newDoc,
-            documents: patient.documents,
+            documents: normalizePatientResponse(patient).documents,
         });
     }),
 );
@@ -514,7 +542,7 @@ router.post(
     requirePermission("patient.document.manage"),
     upload.single("profile_image"),
     asyncHandler(async (req, res) => {
-        const patient = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) }));
+        const patient = await findPatientByPublicId(req, req.params.id);
 
         if (!patient) {
             return res.status(404).json({ message: "Patient not found" });
@@ -562,7 +590,7 @@ router.post(
             profile_image_url: patient.profile_image_url,
             profile_image_public_id: patient.profile_image_public_id,
             storage: profileImageStorage,
-            patient: patient.toJSON?.() || patient,
+            patient: normalizePatientResponse(patient),
         });
     }),
 );
@@ -570,7 +598,7 @@ router.delete(
     "/:id/documents/:docIndex",
     requirePermission("patient.document.manage"),
     asyncHandler(async (req, res) => {
-        const patient = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) }));
+        const patient = await findPatientByPublicId(req, req.params.id);
 
         if (!patient) {
             return res.status(404).json({ message: "Patient not found" });
@@ -595,7 +623,7 @@ router.delete(
 
         res.json({
             message: "Document deleted successfully",
-            documents: patient.documents,
+            documents: normalizePatientResponse(patient).documents,
         });
     }),
 );
@@ -603,10 +631,10 @@ router.delete(
     "/:id",
     requirePermission("patient.delete"),
     asyncHandler(async (req, res) => {
-        const patient = await Patient.findOne(activePatientFilter(req, { id: Number(req.params.id) })).lean();
+        const patient = await findPatientByPublicId(req, req.params.id).lean();
         if (!patient) return res.status(404).json({ message: "Patient not found" });
         await Patient.findOneAndUpdate(
-            activePatientFilter(req, { id: Number(req.params.id) }),
+            patientLookupFilter(req, req.params.id),
             { $set: { status: 'inactive', deleted_at: new Date(), deleted_by: req.user?.id || null } },
         );
         await auditEvent({ req, action: 'patient.soft_deleted', module_name: 'patients', entity_type: 'Patient', entity_id: req.params.id, old_value: patient });

@@ -1,5 +1,5 @@
 const express = require('express');
-const { Doctor, DoctorSchedule, Department, Appointment, Patient, Bed, Billing, AuditLog, DynamicField } = require('../models');
+const { Doctor, DoctorSchedule, Department, Appointment, AppointmentTokenCounter, Patient, Bed, Billing, AuditLog, DynamicField } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const { verifyToken, requirePermission } = require('../middleware/auth');
 const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/tenant');
@@ -38,51 +38,39 @@ async function safelyDestroyCloudinary(publicId, resourceType = 'auto') {
     }
 }
 
-
-function normalizeLookupValue(value) {
-    if (value === undefined || value === null) return '';
-    return String(value).trim();
+function identityLookup(identifier, idField) {
+    const raw = String(identifier ?? '').trim();
+    const numeric = Number(raw);
+    const objectIdLike = /^[a-fA-F0-9]{24}$/.test(raw);
+    const or = [];
+    if (Number.isFinite(numeric) && raw !== '') or.push({ id: numeric });
+    if (raw) or.push({ [idField]: raw });
+    if (objectIdLike) or.push({ _id: raw });
+    return or.length ? { $or: or } : null;
 }
 
-async function findDoctorByAnyIdentifier(req, options = {}) {
-    const values = [
-        req.params?.id,
-        req.body?.doctor_id,
-        req.body?.id,
-        req.body?.doctorId,
-        req.query?.doctor_id,
-        req.query?.id,
-        options.id,
-    ].map(normalizeLookupValue).filter(Boolean);
-
-    const seen = new Set();
-    const uniqueValues = values.filter((value) => {
-        if (seen.has(value)) return false;
-        seen.add(value);
-        return true;
-    });
-
-    for (const value of uniqueValues) {
-        const numericId = Number(value);
-        if (Number.isFinite(numericId) && numericId > 0) {
-            const byInternalId = await Doctor.findOne(tenantFilter(req, { id: numericId }));
-            if (byInternalId) return byInternalId;
-        }
-
-        const byDoctorId = await Doctor.findOne(tenantFilter(req, { doctor_id: value }));
-        if (byDoctorId) return byDoctorId;
-
-        if (/^[0-9a-fA-F]{24}$/.test(value)) {
-            const byMongoId = await Doctor.findOne(tenantFilter(req, { _id: value }));
-            if (byMongoId) return byMongoId;
-        }
-    }
-
-    return null;
+async function resolveDoctorByIdentifier(req, identifier, { includeArchived = false, lean = false } = {}) {
+    const lookup = identityLookup(identifier, 'doctor_id');
+    if (!lookup) return null;
+    const active = includeArchived ? {} : { status: { $ne: 'archived' }, deleted_at: { $exists: false } };
+    const query = Doctor.findOne({ $and: [tenantFilter(req), active, lookup] });
+    return lean ? query.lean() : query;
 }
 
-function getDoctorResponseId(doctor, fallback = '') {
-    return doctor?.id || doctor?.doctor_id || doctor?._id || fallback;
+async function resolvePatientByIdentifier(req, identifier, { includeArchived = false, lean = true } = {}) {
+    const lookup = identityLookup(identifier, 'patient_id');
+    if (!lookup) return null;
+    const active = includeArchived ? {} : { status: { $ne: 'archived' }, deleted_at: { $exists: false } };
+    const query = Patient.findOne({ $and: [tenantFilter(req), active, lookup] });
+    return lean ? query.lean() : query;
+}
+
+function publicDoctorId(doctor) {
+    return String(doctor?.id || doctor?.doctor_id || '').trim();
+}
+
+function publicPatientId(patient) {
+    return String(patient?.id || patient?.patient_id || '').trim();
 }
 
 router.use(verifyToken, attachTenant);
@@ -215,20 +203,21 @@ router.get('/doctors', requirePermission('doctor.view'), asyncHandler(async (req
     const rows = await Doctor.find(baseFilter).sort({ id: -1 }).lean();
     const deps = await Department.find(tenantFilter(req)).lean();
     const dm = Object.fromEntries(deps.map(d => [d.id, d.department_name]));
-    res.json(rows.map(d => ({ ...d, department_name: dm[d.department_id] })));
+    res.json(rows.map(d => ({ ...d, public_id: publicDoctorId(d), department_name: dm[d.department_id] })));
 }));
 
 
 router.get('/doctors/:id', requirePermission('doctor.view'), asyncHandler(async (req, res) => {
-    const doctorDoc = await findDoctorByAnyIdentifier(req);
-    if (!doctorDoc) return res.status(404).json({ message: 'Doctor not found' });
-    const doctor = doctorDoc.toObject ? doctorDoc.toObject() : doctorDoc;
+    const doctor = await resolveDoctorByIdentifier(req, req.params.id, { includeArchived: true, lean: true });
+    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
 
     let departmentName = '';
     if (doctor.department_id) {
         const department = await Department.findOne(tenantFilter(req, { id: Number(doctor.department_id) })).lean();
         departmentName = department?.department_name || '';
     }
+
+    doctor.public_id = publicDoctorId(doctor);
 
     const doctorAppointments = await Appointment.find(tenantFilter(req, {
         $or: [
@@ -319,9 +308,9 @@ router.put('/doctors/:id', requirePermission('doctor.edit'), asyncHandler(async 
 
 
 router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), upload.single('profile_image'), asyncHandler(async (req, res) => {
-    const doctor = await findDoctorByAnyIdentifier(req);
+    const doctor = await resolveDoctorByIdentifier(req, req.params.id, { includeArchived: false, lean: false });
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
+    const doctorNumericId = doctor.id;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Profile image is required' });
@@ -374,9 +363,9 @@ router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), uplo
 
 
 router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'), upload.single('document'), asyncHandler(async (req, res) => {
-    const doctor = await findDoctorByAnyIdentifier(req);
+    const doctor = await resolveDoctorByIdentifier(req, req.params.id, { includeArchived: false, lean: false });
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
+    const doctorNumericId = doctor.id;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Document file is required' });
@@ -445,14 +434,13 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
 
 router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.document.manage'), asyncHandler(async (req, res) => {
     const docIndex = Number(req.params.docIndex);
-
     if (!Number.isInteger(docIndex) || docIndex < 0) {
         return res.status(400).json({ message: 'Invalid doctor document request' });
     }
 
-    const doctor = await findDoctorByAnyIdentifier(req);
+    const doctor = await resolveDoctorByIdentifier(req, req.params.id, { includeArchived: false, lean: false });
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
+    const doctorNumericId = doctor.id;
 
     const doc = doctor.certificates?.[docIndex];
     if (!doc) return res.status(404).json({ message: 'Document not found' });
@@ -504,6 +492,36 @@ router.post('/departments', requirePermission('doctor.create'), asyncHandler(asy
 const APPOINTMENT_STATUSES = ['scheduled', 'checked_in', 'in_consultation', 'completed', 'cancelled', 'no_show', 'archived'];
 const APPOINTMENT_TYPES = ['opd', 'follow_up', 'emergency', 'teleconsultation'];
 const ACTIVE_APPOINTMENT_STATUSES = ['scheduled', 'checked_in', 'in_consultation', 'completed'];
+const QUEUE_ACTIVE_STATUSES = ['scheduled', 'checked_in', 'in_consultation'];
+const TERMINAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'no_show', 'archived'];
+const APPOINTMENT_STATUS_TRANSITIONS = {
+    scheduled: ['checked_in', 'cancelled', 'no_show', 'archived'],
+    checked_in: ['in_consultation', 'completed', 'cancelled', 'no_show', 'archived'],
+    in_consultation: ['completed', 'cancelled', 'archived'],
+    completed: ['archived'],
+    cancelled: ['archived'],
+    no_show: ['archived'],
+    archived: [],
+};
+
+function normalizeAppointmentStatus(value, fallback = 'scheduled') {
+    const status = String(value || fallback || 'scheduled').trim().toLowerCase();
+    return APPOINTMENT_STATUSES.includes(status) ? status : fallback;
+}
+
+function canMoveAppointmentStatus(from, to) {
+    const current = normalizeAppointmentStatus(from);
+    const next = normalizeAppointmentStatus(to);
+    if (current === next) return true;
+    return (APPOINTMENT_STATUS_TRANSITIONS[current] || []).includes(next);
+}
+
+function statusTransitionMessage(from, to) {
+    const current = normalizeAppointmentStatus(from);
+    const next = normalizeAppointmentStatus(to);
+    const allowed = APPOINTMENT_STATUS_TRANSITIONS[current] || [];
+    return `Invalid appointment status transition: ${current.replaceAll('_', ' ')} → ${next.replaceAll('_', ' ')}. Allowed next status: ${allowed.length ? allowed.map((x) => x.replaceAll('_', ' ')).join(', ') : 'none'}.`;
+}
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_WORKING_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -542,13 +560,7 @@ function normalizeWorkingDays(value) {
 }
 
 async function resolveDoctorForSchedule(req, doctorIdentifier) {
-    if (!doctorIdentifier && doctorIdentifier !== 0) return null;
-    return Doctor.findOne({
-        $and: [
-            tenantFilter(req),
-            { $or: [{ id: Number(doctorIdentifier) || -1 }, { doctor_id: String(doctorIdentifier) }] },
-        ],
-    }).lean();
+    return resolveDoctorByIdentifier(req, doctorIdentifier, { includeArchived: false, lean: true });
 }
 
 function normalizeSchedulePayload(body = {}) {
@@ -698,38 +710,27 @@ function validateAppointmentPayload(payload, { partial = false } = {}) {
     return null;
 }
 
+async function resolveAppointmentReferences(req, payload) {
+    const patient = payload.patient_id ? await resolvePatientByIdentifier(req, payload.patient_id, { lean: true }) : null;
+    if (payload.patient_id && !patient) return { error: 'Selected patient was not found in this hospital' };
+
+    const doctor = payload.doctor_id ? await resolveDoctorByIdentifier(req, payload.doctor_id, { lean: true }) : null;
+    if (payload.doctor_id && !doctor) return { error: 'Selected doctor was not found in this hospital' };
+
+    return { patient, doctor };
+}
+
+function canonicalizeAppointmentPayload(payload, refs = {}) {
+    return {
+        ...payload,
+        patient_id: refs.patient ? publicPatientId(refs.patient) : String(payload.patient_id || '').trim(),
+        doctor_id: refs.doctor ? publicDoctorId(refs.doctor) : String(payload.doctor_id || '').trim(),
+    };
+}
+
 async function ensureAppointmentReferences(req, payload) {
-    if (payload.patient_id) {
-        const patient = await Patient.findOne({
-            $and: [
-                tenantFilter(req),
-                {
-                    $or: [
-                        { id: Number(payload.patient_id) || -1 },
-                        { patient_id: String(payload.patient_id) },
-                    ],
-                },
-            ],
-        }).lean();
-        if (!patient) return 'Selected patient was not found in this hospital';
-    }
-
-    if (payload.doctor_id) {
-        const doctor = await Doctor.findOne({
-            $and: [
-                tenantFilter(req),
-                {
-                    $or: [
-                        { id: Number(payload.doctor_id) || -1 },
-                        { doctor_id: String(payload.doctor_id) },
-                    ],
-                },
-            ],
-        }).lean();
-        if (!doctor) return 'Selected doctor was not found in this hospital';
-    }
-
-    return null;
+    const refs = await resolveAppointmentReferences(req, payload);
+    return refs.error || null;
 }
 
 async function ensureDoctorSlotAvailable(req, payload, currentAppointmentId = null) {
@@ -752,20 +753,58 @@ async function ensureDoctorSlotAvailable(req, payload, currentAppointmentId = nu
     return null;
 }
 
-async function generateTokenNumber(req, appointmentDate) {
+function parseTokenSequence(token) {
+    const raw = String(token || '');
+    const suffix = raw.includes('-') ? raw.split('-').pop() : raw;
+    const parsed = Number(String(suffix || '').replace(/\D/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function buildTokenNumber(appointmentDate, sequence) {
+    const dateKey = String(appointmentDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+    return `${dateKey}-${String(Number(sequence || 1)).padStart(3, '0')}`;
+}
+
+async function maxTokenSequenceForDate(req, appointmentDate) {
     const rows = await Appointment.find(tenantFilter(req, { appointment_date: appointmentDate, status: { $ne: 'archived' } }))
-        .select('token_number id')
+        .select('token_number token_sequence id')
         .lean();
-    const maxToken = rows.reduce((max, row) => {
-        const parsed = Number(String(row.token_number || '').replace(/\D/g, ''));
-        return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
-    }, 0);
-    return String(maxToken + 1).padStart(3, '0');
+    return rows.reduce((max, row) => Math.max(max, Number(row.token_sequence || 0), parseTokenSequence(row.token_number)), 0);
+}
+
+async function ensureTokenCounterInitialized(req, appointmentDate) {
+    const filter = tenantFilter(req, { appointment_date: appointmentDate });
+    const existing = await AppointmentTokenCounter.findOne(filter).lean();
+    if (existing) return existing;
+
+    const maxSeq = await maxTokenSequenceForDate(req, appointmentDate);
+    try {
+        return await AppointmentTokenCounter.create(tenantCreateData(req, { appointment_date: appointmentDate, seq: maxSeq }));
+    } catch (error) {
+        if (error?.code !== 11000) throw error;
+        return AppointmentTokenCounter.findOne(filter).lean();
+    }
+}
+
+async function generateAppointmentToken(req, appointmentDate) {
+    const date = String(appointmentDate || new Date().toISOString().slice(0, 10));
+    await ensureTokenCounterInitialized(req, date);
+    const counter = await AppointmentTokenCounter.findOneAndUpdate(
+        tenantFilter(req, { appointment_date: date }),
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+    ).lean();
+    const sequence = Number(counter?.seq || 1);
+    return { token_number: buildTokenNumber(date, sequence), token_sequence: sequence };
+}
+
+function queueTokenValue(row) {
+    return Number(row.token_sequence || 0) || parseTokenSequence(row.token_number) || Number(row.id || 0);
 }
 
 function queueSort(a, b) {
-    const tokenA = Number(String(a.token_number || '').replace(/\D/g, '')) || Number(a.id || 0);
-    const tokenB = Number(String(b.token_number || '').replace(/\D/g, '')) || Number(b.id || 0);
+    const tokenA = queueTokenValue(a);
+    const tokenB = queueTokenValue(b);
     if (tokenA !== tokenB) return tokenA - tokenB;
     return String(a.appointment_time || '').localeCompare(String(b.appointment_time || ''));
 }
@@ -861,8 +900,7 @@ router.get('/appointments/queue', requirePermission('appointment.view'), asyncHa
     const rows = await Appointment.find(tenantFilter(req, filter)).sort({ appointment_time: 1, id: 1 });
     const namedRows = await withNames(req, rows);
     const queueRows = enrichQueueRows(namedRows.sort(queueSort));
-    const activeStatuses = ['scheduled', 'checked_in', 'in_consultation'];
-    const activeQueue = queueRows.filter(row => activeStatuses.includes(row.status));
+    const activeQueue = queueRows.filter(row => QUEUE_ACTIVE_STATUSES.includes(row.status || 'scheduled'));
 
     const doctors = {};
     activeQueue.forEach((row) => {
@@ -904,8 +942,9 @@ router.get('/appointments', requirePermission('appointment.view'), asyncHandler(
     if (patient_id) filter.patient_id = String(patient_id);
     if (type && type !== 'all') filter.appointment_type = String(type).toLowerCase();
 
-    const rows = await Appointment.find(tenantFilter(req, filter)).sort({ appointment_date: -1, appointment_time: -1, id: -1 });
-    res.json(await withNames(req, rows));
+    const rows = await Appointment.find(tenantFilter(req, filter)).sort({ appointment_date: -1, token_sequence: 1, appointment_time: 1, id: 1 });
+    const namedRows = await withNames(req, rows);
+    res.json(namedRows.sort((a, b) => String(b.appointment_date || '').localeCompare(String(a.appointment_date || '')) || queueSort(a, b)));
 }));
 
 router.post('/appointments', requirePermission('appointment.create'), asyncHandler(async (req, res) => {
@@ -914,28 +953,31 @@ router.post('/appointments', requirePermission('appointment.create'), asyncHandl
     const validationError = validateAppointmentPayload(payload);
     if (validationError) return res.status(400).json({ message: validationError });
 
-    const referenceError = await ensureAppointmentReferences(req, payload);
-    if (referenceError) return res.status(400).json({ message: referenceError });
+    const refs = await resolveAppointmentReferences(req, payload);
+    if (refs.error) return res.status(400).json({ message: refs.error });
+    const canonicalPayload = canonicalizeAppointmentPayload(payload, refs);
 
-    const slotError = await ensureDoctorSlotAvailable(req, payload);
+    const slotError = await ensureDoctorSlotAvailable(req, canonicalPayload);
     if (slotError) return res.status(409).json({ message: slotError });
 
-    const scheduleError = await ensureWithinDoctorSchedule(req, payload);
+    const scheduleError = await ensureWithinDoctorSchedule(req, canonicalPayload);
     if (scheduleError) return res.status(409).json({ message: scheduleError });
 
     const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'appointments_per_month', 1);
     if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
 
-    const token_number = req.body.token_number || await generateTokenNumber(req, payload.appointment_date);
+    const token = await generateAppointmentToken(req, canonicalPayload.appointment_date);
+    const token_number = token.token_number;
     const r = await Appointment.create(tenantCreateData(req, {
-        ...payload,
+        ...canonicalPayload,
         appointment_uid: uid,
         token_number,
+        token_sequence: token.token_sequence,
     }));
 
     await createNotification(req, {
         title: 'Appointment created',
-        message: `Appointment ${token_number} scheduled for ${payload.appointment_date} at ${payload.appointment_time}.`,
+        message: `Appointment ${token_number} scheduled for ${canonicalPayload.appointment_date} at ${canonicalPayload.appointment_time}.`,
         type: 'appointment',
         severity: payload.appointment_type === 'emergency' ? 'critical' : 'info',
         module: 'appointments',
@@ -951,11 +993,30 @@ router.patch('/appointments/:id/status', requirePermission('appointment.status.u
     const appointmentId = Number(req.params.id);
     if (!Number.isFinite(appointmentId)) return res.status(400).json({ message: 'Invalid appointment id' });
 
-    const status = String(req.body.status || '').toLowerCase();
+    const status = normalizeAppointmentStatus(req.body.status, '');
     if (!APPOINTMENT_STATUSES.includes(status) || status === 'archived') return res.status(400).json({ message: 'Invalid appointment status' });
 
     const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId, status: { $ne: 'archived' } })).lean();
     if (!existing) return res.status(404).json({ message: 'Appointment not found' });
+
+    if (!canMoveAppointmentStatus(existing.status || 'scheduled', status)) {
+        return res.status(409).json({ message: statusTransitionMessage(existing.status || 'scheduled', status) });
+    }
+
+    if (status === 'in_consultation') {
+        const activeConsultation = await Appointment.findOne(tenantFilter(req, {
+            id: { $ne: appointmentId },
+            doctor_id: String(existing.doctor_id || ''),
+            appointment_date: existing.appointment_date,
+            status: 'in_consultation',
+        })).lean();
+        if (activeConsultation) {
+            return res.status(409).json({
+                message: `Doctor already has patient ${activeConsultation.patient_id || activeConsultation.id} in consultation. Complete that consultation before calling another patient.`,
+                active_appointment_id: activeConsultation.id,
+            });
+        }
+    }
 
     const update = { status, ...statusTimestampUpdate(status) };
     if (status === 'cancelled') {
@@ -998,9 +1059,11 @@ router.put('/appointments/:id', requirePermission('appointment.edit'), asyncHand
     const validationError = validateAppointmentPayload(payload, { partial: true });
     if (validationError) return res.status(400).json({ message: validationError });
 
-    const merged = { ...existing, ...payload };
-    const referenceError = await ensureAppointmentReferences(req, merged);
-    if (referenceError) return res.status(400).json({ message: referenceError });
+    const mergedRaw = { ...existing, ...payload };
+    const refs = await resolveAppointmentReferences(req, mergedRaw);
+    if (refs.error) return res.status(400).json({ message: refs.error });
+    const merged = canonicalizeAppointmentPayload(mergedRaw, refs);
+    const payloadForUpdate = canonicalizeAppointmentPayload(payload, refs);
 
     const slotError = await ensureDoctorSlotAvailable(req, merged, appointmentId);
     if (slotError) return res.status(409).json({ message: slotError });
@@ -1008,12 +1071,12 @@ router.put('/appointments/:id', requirePermission('appointment.edit'), asyncHand
     const scheduleError = await ensureWithinDoctorSchedule(req, merged, appointmentId);
     if (scheduleError) return res.status(409).json({ message: scheduleError });
 
-    const update = { ...payload, ...statusTimestampUpdate(payload.status) };
-    const scheduleChanged = ['doctor_id', 'appointment_date', 'appointment_time'].some((key) => Object.prototype.hasOwnProperty.call(payload, key) && String(payload[key] || '') !== String(existing[key] || ''));
+    const update = { ...payloadForUpdate, ...statusTimestampUpdate(payloadForUpdate.status) };
+    const scheduleChanged = ['doctor_id', 'appointment_date', 'appointment_time'].some((key) => Object.prototype.hasOwnProperty.call(payloadForUpdate, key) && String(payloadForUpdate[key] || '') !== String(existing[key] || ''));
     if (scheduleChanged) {
         update.previous_schedule = { doctor_id: existing.doctor_id, appointment_date: existing.appointment_date, appointment_time: existing.appointment_time };
         update.rescheduled_at = new Date();
-        update.reschedule_reason = String(req.body.reschedule_reason || payload.reschedule_reason || 'Rescheduled from appointment edit').trim();
+        update.reschedule_reason = String(req.body.reschedule_reason || payloadForUpdate.reschedule_reason || 'Rescheduled from appointment edit').trim();
     }
     const updated = await Appointment.findOneAndUpdate(
         tenantFilter(req, { id: appointmentId }),

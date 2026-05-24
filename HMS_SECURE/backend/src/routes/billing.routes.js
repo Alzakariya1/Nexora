@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { auditEvent } = require('../utils/audit');
 const { verifyToken, requirePermission } = require('../middleware/auth');
 const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/tenant');
+const { normalizeClinicalReferences } = require('../utils/refResolver');
 
 const router = express.Router();
 router.use(verifyToken, attachTenant);
@@ -82,8 +83,9 @@ function normalizeItems(items = []) {
   }).filter(item => item.amount >= 0);
 }
 
-function buildInvoicePayload(req, existing = null) {
+async function buildInvoicePayload(req, existing = null) {
   const b = req.body || {};
+  const { normalized } = await normalizeClinicalReferences(req, b, { requirePatient: !existing, requireDoctor: false });
   const items = normalizeItems(b.items);
   const itemTotal = items.reduce((sum, item) => sum + money(item.amount), 0);
   const legacySubtotal = ['consultation_fee', 'consultation_charges', 'room_charges', 'icu_charges', 'lab_charges', 'medicine_charges', 'nursing_charges', 'ambulance_charges']
@@ -105,8 +107,11 @@ function buildInvoicePayload(req, existing = null) {
   return tenantCreateData(req, {
     ...b,
     invoice_number,
-    patient_id: String(b.patient_id || existing?.patient_id || '').trim(),
-    doctor_id: b.doctor_id || existing?.doctor_id || '',
+    patient_id: normalized.patient_id || String(b.patient_id || existing?.patient_id || '').trim(),
+    patient_uid: normalized.patient_uid || existing?.patient_uid || '',
+    patient_name: normalized.patient_name || existing?.patient_name || '',
+    doctor_id: normalized.doctor_id || b.doctor_id || existing?.doctor_id || '',
+    doctor_name: normalized.doctor_name || existing?.doctor_name || '',
     service_type: b.service_type || existing?.service_type || 'opd',
     items,
     amount: total_amount,
@@ -140,7 +145,7 @@ function buildInvoicePayload(req, existing = null) {
 async function createInvoice(req, res) {
   const errors = validateInvoicePayload(req.body);
   if (errors.length) return res.status(400).json({ message: 'Billing validation failed', errors });
-  const payload = buildInvoicePayload(req);
+  const payload = await buildInvoicePayload(req);
   const r = await Billing.create(payload);
   await auditEvent({ req, action: 'billing.invoice_created', module_name: 'billing', entity_type: 'Billing', entity_id: r.id, new_value: payload });
   res.status(201).json({
@@ -201,7 +206,7 @@ router.put('/:id', requirePermission('billing.edit'), asyncHandler(async (req, r
   const errors = validateInvoicePayload(req.body, { partial: true });
   if (errors.length) return res.status(400).json({ message: 'Billing validation failed', errors });
   const oldValue = bill.toJSON();
-  const payload = buildInvoicePayload(req, bill);
+  const payload = await buildInvoicePayload(req, bill);
   Object.assign(bill, payload);
   await bill.save();
   await auditEvent({ req, action: 'billing.invoice_updated', module_name: 'billing', entity_type: 'Billing', entity_id: bill.id, old_value: oldValue, new_value: payload });

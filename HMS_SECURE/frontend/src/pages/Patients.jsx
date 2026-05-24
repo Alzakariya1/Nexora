@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { DataTable } from "../components";
 import { patientApi } from "../api/patientApi";
+import { getPatientPublicId, findPatientByAnyId } from "../utils/hmsIds";
 
 // Compatibility alias while remaining pages are being split safely.
 const Table = DataTable;
@@ -50,14 +51,15 @@ export default function Patients({
   useEffect(() => {
     let mounted = true;
     async function loadTimeline() {
-      if (activeView !== "patientProfile" || !selectedPatient?.id) {
+      const selectedPatientId = getPatientPublicId(selectedPatient || {});
+      if (activeView !== "patientProfile" || !selectedPatientId) {
         setPatientTimeline(null);
         return;
       }
       setTimelineLoading(true);
       setTimelineError("");
       try {
-        const { data } = await patientApi.timeline(selectedPatient.id);
+        const { data } = await patientApi.timeline(selectedPatientId);
         if (mounted) setPatientTimeline(data);
       } catch (err) {
         if (mounted) setTimelineError(err?.response?.data?.message || "Unable to load patient timeline.");
@@ -67,7 +69,7 @@ export default function Patients({
     }
     loadTimeline();
     return () => { mounted = false; };
-  }, [activeView, selectedPatient?.id]);
+  }, [activeView, selectedPatient?.id, selectedPatient?.patient_id, selectedPatient?.public_id]);
 
   const timelineSummary = patientTimeline?.summary || {};
   const timelineRows = patientTimeline?.timeline || [];
@@ -407,11 +409,10 @@ export default function Patients({
                     onDelete={permissions.patientDelete ? deletePatient : null}
                     showProfile={true}
                     onProfile={(row) => {
-                      const latestPatient =
-                        patients.find(
-                          (p) =>
-                            p.id === row.id || p.patient_id === row.patient_id,
-                        ) || row;
+                      const latestPatient = findPatientByAnyId(
+                        patients,
+                        getPatientPublicId(row) || row.patient_id || row.id,
+                      ) || row;
 
                       setSelectedPatient(latestPatient);
                       setTab("patientProfile");
@@ -781,12 +782,12 @@ export default function Patients({
                                     <i className="bi bi-download"></i>
                                   </a>
 
-                                  {permissions.patientDocumentManage && selectedPatient?.id && (
+                                  {permissions.patientDocumentManage && getPatientPublicId(selectedPatient || {}) && (
                                     <button
                                       type="button"
                                       className="icon-btn delete-btn"
                                       title="Delete Document"
-                                      onClick={() => deletePatientDocument?.(selectedPatient.id, docIndex)}
+                                      onClick={() => deletePatientDocument?.(getPatientPublicId(selectedPatient || {}), docIndex)}
                                     >
                                       <i className="bi bi-trash"></i>
                                     </button>

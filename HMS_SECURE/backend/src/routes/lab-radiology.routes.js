@@ -5,6 +5,7 @@ const { verifyToken, requirePermission } = require('../middleware/auth');
 const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/tenant');
 const { createNotification } = require('../utils/notifications');
 const { auditEvent } = require('../utils/audit');
+const { normalizeClinicalReferences } = require('../utils/refResolver');
 
 const router = express.Router();
 router.use(verifyToken, attachTenant);
@@ -84,14 +85,18 @@ function parameterRows(body) {
 }
 
 async function buildLabPayload(req, overrides = {}) {
-  requireFields({ patient_id: req.body.patient_id, test_name: req.body.test_name || req.body.name || req.body.test || req.body.template_id });
+  requireFields({ patient_id: req.body.patient_id || req.body.appointment_id, test_name: req.body.test_name || req.body.name || req.body.test || req.body.template_id });
+  const { normalized } = await normalizeClinicalReferences(req, req.body, { requirePatient: true, requireDoctor: false });
   const templateId = req.body.template_id ? Number(req.body.template_id) : undefined;
   const template = templateId ? await LabTestTemplate.findOne(tenantFilter(req, { id: templateId })).lean() : null;
   const baseParameters = parameterRows(req.body).length ? parameterRows(req.body) : (template?.parameters || []);
   return tenantCreateData(req, {
-    patient_id: req.body.patient_id,
-    doctor_id: req.body.doctor_id,
-    appointment_id: req.body.appointment_id ? Number(req.body.appointment_id) : undefined,
+    patient_id: normalized.patient_id,
+    patient_uid: normalized.patient_uid,
+    patient_name: normalized.patient_name,
+    doctor_id: normalized.doctor_id || '',
+    doctor_name: normalized.doctor_name || '',
+    appointment_id: normalized.appointment_id,
     opd_id: req.body.opd_id ? Number(req.body.opd_id) : undefined,
     template_id: templateId,
     test_name: req.body.test_name || template?.test_name || req.body.name || req.body.test || 'Lab Test',
@@ -108,12 +113,16 @@ async function buildLabPayload(req, overrides = {}) {
   });
 }
 
-function cleanRadPayload(req, overrides = {}) {
-  requireFields({ patient_id: req.body.patient_id, scan_name: req.body.scan_name || req.body.name || req.body.scan });
+async function cleanRadPayload(req, overrides = {}) {
+  requireFields({ patient_id: req.body.patient_id || req.body.appointment_id, scan_name: req.body.scan_name || req.body.name || req.body.scan });
+  const { normalized } = await normalizeClinicalReferences(req, req.body, { requirePatient: true, requireDoctor: false });
   return tenantCreateData(req, {
-    patient_id: req.body.patient_id,
-    doctor_id: req.body.doctor_id,
-    appointment_id: req.body.appointment_id ? Number(req.body.appointment_id) : undefined,
+    patient_id: normalized.patient_id,
+    patient_uid: normalized.patient_uid,
+    patient_name: normalized.patient_name,
+    doctor_id: normalized.doctor_id || '',
+    doctor_name: normalized.doctor_name || '',
+    appointment_id: normalized.appointment_id,
     opd_id: req.body.opd_id ? Number(req.body.opd_id) : undefined,
     scan_name: req.body.scan_name || req.body.name || req.body.scan || 'Radiology Scan',
     scan_category: req.body.scan_category || req.body.category || 'General',
@@ -284,14 +293,14 @@ router.get('/lab/machine-api/orders', requirePermission('lab.view'), asyncHandle
 }));
 
 router.post('/radiology/tests', requirePermission('radiology.create'), asyncHandler(async (req, res) => {
-  const r = await RadiologyTest.create(cleanRadPayload(req));
+  const r = await RadiologyTest.create(await cleanRadPayload(req));
   await auditEvent({ req, action: 'radiology.order_created', module_name: 'radiology', entity_type: 'RadiologyTest', entity_id: r.id, new_value: r.toJSON?.() || r });
   await createNotification(req, { title: 'Radiology order created', message: `${r.scan_name} ordered.`, type: 'radiology', severity: 'info', module: 'radiology', entity_type: 'radiology_test', entity_id: r.id, target_path: '/labs' });
   res.status(201).json({ message: 'Radiology order created', scanId: r.id, accession_number: r.accession_number });
 }));
 
 router.post('/radiology/book-scan', requirePermission('radiology.create'), asyncHandler(async (req, res) => {
-  const r = await RadiologyTest.create(cleanRadPayload(req));
+  const r = await RadiologyTest.create(await cleanRadPayload(req));
   await auditEvent({ req, action: 'radiology.order_created', module_name: 'radiology', entity_type: 'RadiologyTest', entity_id: r.id, new_value: r.toJSON?.() || r });
   res.status(201).json({ message: 'Radiology order created', scanId: r.id });
 }));
