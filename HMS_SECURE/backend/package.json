@@ -58,7 +58,8 @@
     "check:phase8b-frontend-testing": "node scripts/phase8b-frontend-testing-check.js",
     "check:phase8c-e2e": "node scripts/phase8c-e2e-testing-check.js",
     "check:phase8d-performance": "node scripts/phase8d-performance-optimization-check.js",
-    "check:phase8e-production-readiness": "node scripts/phase8e-production-readiness-check.js"
+    "check:phase8e-production-readiness": "node scripts/phase8e-production-readiness-check.js",
+    "check-cloudinary": "node scripts/check-cloudinary.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
