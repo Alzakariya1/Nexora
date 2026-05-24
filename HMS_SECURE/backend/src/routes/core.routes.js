@@ -38,23 +38,84 @@ async function safelyDestroyCloudinary(publicId, resourceType = 'auto') {
     }
 }
 
-function identityLookup(identifier, idField) {
+function escapeRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function idCandidates(identifier, prefix = '') {
+    const raw = String(identifier ?? '').trim();
+    const values = new Set();
+    if (raw) values.add(raw);
+
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric) && raw !== '') {
+        values.add(String(numeric));
+        values.add(String(numeric).padStart(2, '0'));
+        values.add(String(numeric).padStart(3, '0'));
+        if (prefix) {
+            values.add(`${prefix}${String(numeric)}`);
+            values.add(`${prefix}-${String(numeric)}`);
+            values.add(`${prefix}${String(numeric).padStart(2, '0')}`);
+            values.add(`${prefix}-${String(numeric).padStart(2, '0')}`);
+            values.add(`${prefix}${String(numeric).padStart(3, '0')}`);
+            values.add(`${prefix}-${String(numeric).padStart(3, '0')}`);
+        }
+    }
+    return Array.from(values).filter(Boolean);
+}
+
+function identityLookup(identifier, idField, { prefix = '' } = {}) {
     const raw = String(identifier ?? '').trim();
     const numeric = Number(raw);
     const objectIdLike = /^[a-fA-F0-9]{24}$/.test(raw);
+    const candidates = idCandidates(raw, prefix);
     const or = [];
     if (Number.isFinite(numeric) && raw !== '') or.push({ id: numeric });
-    if (raw) or.push({ [idField]: raw });
+    for (const value of candidates) or.push({ [idField]: value });
     if (objectIdLike) or.push({ _id: raw });
     return or.length ? { $or: or } : null;
 }
 
 async function resolveDoctorByIdentifier(req, identifier, { includeArchived = false, lean = false } = {}) {
-    const lookup = identityLookup(identifier, 'doctor_id');
+    const lookup = identityLookup(identifier, 'doctor_id', { prefix: 'DOC' });
     if (!lookup) return null;
     const active = includeArchived ? {} : { status: { $ne: 'archived' }, deleted_at: { $exists: false } };
-    const query = Doctor.findOne({ $and: [tenantFilter(req), active, lookup] });
-    return lean ? query.lean() : query;
+
+    // 1) Normal tenant-safe lookup. This is the correct production path.
+    let query = Doctor.findOne({ $and: [tenantFilter(req), active, lookup] });
+    let doctor = lean ? await query.lean() : await query;
+    if (doctor) return doctor;
+
+    const raw = String(identifier ?? '').trim();
+    const numeric = Number(raw);
+
+    // 2) Backward-compatible fallback for old seeded/imported doctors where
+    // doctor_id was saved as DOC002/DR002/D-002 while the UI sends only 2.
+    if (Number.isFinite(numeric) && raw !== '') {
+        const suffix = String(numeric).replace(/^0+/, '') || '0';
+        const padded2 = String(numeric).padStart(2, '0');
+        const padded3 = String(numeric).padStart(3, '0');
+        const doctorIdRegex = new RegExp(`(^|[^0-9])0*${escapeRegex(suffix)}$|${escapeRegex(padded2)}$|${escapeRegex(padded3)}$`, 'i');
+        query = Doctor.findOne({
+            $and: [
+                tenantFilter(req),
+                active,
+                { $or: [{ doctor_id: doctorIdRegex }, { public_id: doctorIdRegex }, { user_id: numeric }] },
+            ],
+        });
+        doctor = lean ? await query.lean() : await query;
+        if (doctor) return doctor;
+    }
+
+    // 3) Last safe fallback for legacy records created before tenant support.
+    // Only super_admin/default hospital can see this, and it still uses the identifier.
+    if (req.user?.role === 'super_admin' || Number(req.hospital_id || 1) === 1) {
+        query = Doctor.findOne({ $and: [active, lookup] });
+        doctor = lean ? await query.lean() : await query;
+        if (doctor) return doctor;
+    }
+
+    return null;
 }
 
 async function resolvePatientByIdentifier(req, identifier, { includeArchived = false, lean = true } = {}) {
@@ -363,8 +424,28 @@ router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), uplo
 
 
 router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'), upload.single('document'), asyncHandler(async (req, res) => {
-    const doctor = await resolveDoctorByIdentifier(req, req.params.id, { includeArchived: false, lean: false });
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorIdentifiers = [
+        req.params.id,
+        req.body?.doctor_id,
+        req.body?.doctor_code,
+        req.body?.mongo_id,
+    ].filter((value, index, arr) => value !== undefined && value !== null && String(value).trim() !== '' && arr.findIndex(v => String(v).trim() === String(value).trim()) === index);
+
+    let doctor = null;
+    for (const identifier of doctorIdentifiers) {
+        doctor = await resolveDoctorByIdentifier(req, identifier, { includeArchived: false, lean: false });
+        if (doctor) break;
+    }
+
+    if (!doctor) {
+        console.warn('Doctor document upload lookup failed:', {
+            identifiers: doctorIdentifiers,
+            hospital_id: req.hospital_id,
+            user_id: req.user?.id,
+            role: req.user?.role,
+        });
+        return res.status(404).json({ message: 'Doctor not found', identifiers: doctorIdentifiers });
+    }
     const doctorNumericId = doctor.id;
 
     if (!req.file) {

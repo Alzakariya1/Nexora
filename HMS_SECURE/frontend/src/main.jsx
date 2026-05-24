@@ -695,6 +695,9 @@ function App() {
       formData.append("document_type", payload.document_type || "Certificate");
       formData.append("category", payload.category || "credential");
       formData.append("notes", payload.notes || "");
+      formData.append("doctor_id", stableDoctorId);
+      if (resolvedDoctor?.doctor_id) formData.append("doctor_code", resolvedDoctor.doctor_id);
+      if (resolvedDoctor?._id) formData.append("mongo_id", resolvedDoctor._id);
 
       const { data } = await doctorApi.uploadDocument(stableDoctorId, formData);
       const refreshed = await doctorApi.get(stableDoctorId);
