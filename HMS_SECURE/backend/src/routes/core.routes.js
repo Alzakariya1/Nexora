@@ -76,10 +76,20 @@ function identityLookup(identifier, idField, { prefix = '' } = {}) {
     return or.length ? { $or: or } : null;
 }
 
+function activeEntityFilter() {
+    return {
+        status: { $ne: 'archived' },
+        $or: [
+            { deleted_at: { $exists: false } },
+            { deleted_at: null },
+        ],
+    };
+}
+
 async function resolveDoctorByIdentifier(req, identifier, { includeArchived = false, lean = false } = {}) {
     const lookup = identityLookup(identifier, 'doctor_id', { prefix: 'DOC' });
     if (!lookup) return null;
-    const active = includeArchived ? {} : { status: { $ne: 'archived' }, deleted_at: { $exists: false } };
+    const active = includeArchived ? {} : activeEntityFilter();
 
     // 1) Normal tenant-safe lookup. This is the correct production path.
     let query = Doctor.findOne({ $and: [tenantFilter(req), active, lookup] });
@@ -121,7 +131,7 @@ async function resolveDoctorByIdentifier(req, identifier, { includeArchived = fa
 async function resolvePatientByIdentifier(req, identifier, { includeArchived = false, lean = true } = {}) {
     const lookup = identityLookup(identifier, 'patient_id');
     if (!lookup) return null;
-    const active = includeArchived ? {} : { status: { $ne: 'archived' }, deleted_at: { $exists: false } };
+    const active = includeArchived ? {} : activeEntityFilter();
     const query = Patient.findOne({ $and: [tenantFilter(req), active, lookup] });
     return lean ? query.lean() : query;
 }
@@ -260,7 +270,7 @@ async function withNames(req, rows) {
 
 router.get('/doctors', requirePermission('doctor.view'), asyncHandler(async (req, res) => {
     const includeArchived = String(req.query.include_archived || '').toLowerCase() === 'true';
-    const baseFilter = includeArchived ? tenantFilter(req) : tenantFilter(req, { status: { $ne: 'archived' }, deleted_at: { $exists: false } });
+    const baseFilter = includeArchived ? tenantFilter(req) : tenantFilter(req, activeEntityFilter());
     const rows = await Doctor.find(baseFilter).sort({ id: -1 }).lean();
     const deps = await Department.find(tenantFilter(req)).lean();
     const dm = Object.fromEntries(deps.map(d => [d.id, d.department_name]));
@@ -330,7 +340,7 @@ router.put('/doctors/:id', requirePermission('doctor.edit'), asyncHandler(async 
     const doctorNumericId = Number(req.params.id);
     if (!Number.isFinite(doctorNumericId)) return res.status(400).json({ message: 'Invalid doctor id' });
 
-    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, status: { $ne: 'archived' } })).lean();
+    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, ...activeEntityFilter() })).lean();
     if (!existingDoctor) return res.status(404).json({ message: 'Doctor not found' });
 
     const validation = validateDoctorPayload(req.body, { partial: true });
@@ -548,7 +558,7 @@ router.delete('/doctors/:id', requirePermission('doctor.delete'), asyncHandler(a
     const doctorNumericId = Number(req.params.id);
     if (!Number.isFinite(doctorNumericId)) return res.status(400).json({ message: 'Invalid doctor id' });
 
-    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, status: { $ne: 'archived' } })).lean();
+    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, ...activeEntityFilter() })).lean();
     if (!existingDoctor) return res.status(404).json({ message: 'Doctor not found' });
 
     const updated = await Doctor.findOneAndUpdate(
