@@ -608,20 +608,18 @@ function App() {
     setEditingDoctorId(null);
   }
 
-  function getDoctorRecordId(row = {}) {
-    return row.id || row.doctor_id || row._id || row.doctor_numeric_id;
+  function getDoctorIdentifier(row) {
+    if (!row) return "";
+    return row.id || row.doctor_id || row._id || row.doctor_uid || "";
   }
 
   async function openDoctorProfile(row) {
-    const fallbackDoctor = doctors.find((d) => String(d.id) === String(row.id) || String(d.doctor_id) === String(row.doctor_id)) || row;
+    const fallbackDoctor = doctors.find((d) => d.id === row.id || d.doctor_id === row.doctor_id) || row;
     setSelectedDoctor(fallbackDoctor);
     setTab("doctorProfile");
 
-    const doctorRecordId = getDoctorRecordId(fallbackDoctor);
-    if (!doctorRecordId) return;
-
     try {
-      const { data } = await doctorApi.get(doctorRecordId);
+      const { data } = await doctorApi.get(getDoctorIdentifier(row));
       setSelectedDoctor(data);
     } catch (err) {
       toast.error(err.response?.data?.message || "Could not refresh doctor profile");
@@ -659,7 +657,8 @@ function App() {
 
 
   async function uploadDoctorDocument(doctorId, payload) {
-    if (!doctorId || !payload?.file) return;
+    const resolvedDoctorId = getDoctorIdentifier(selectedDoctor) || doctorId;
+    if (!resolvedDoctorId || !payload?.file) return;
 
     const allowedTypes = [
       "application/pdf",
@@ -687,16 +686,15 @@ function App() {
       formData.append("document_type", payload.document_type || "Certificate");
       formData.append("category", payload.category || "credential");
       formData.append("notes", payload.notes || "");
-      formData.append("doctor_id", String(doctorId));
-      formData.append("doctor_numeric_id", String(doctorId));
 
-      const { data } = await doctorApi.uploadDocument(doctorId, formData);
-      if (data?.doctor) {
-        setSelectedDoctor(data.doctor);
-      } else {
-        const refreshed = await doctorApi.get(doctorId);
-        setSelectedDoctor(refreshed.data);
-      }
+      formData.append("doctor_id", String(selectedDoctor?.doctor_id || resolvedDoctorId));
+      formData.append("id", String(selectedDoctor?.id || resolvedDoctorId));
+
+      const { data } = await doctorApi.uploadDocument(resolvedDoctorId, formData);
+      const refreshId = getDoctorIdentifier(data.doctor) || resolvedDoctorId;
+      const refreshed = await doctorApi.get(refreshId);
+
+      setSelectedDoctor(refreshed.data);
       await load();
       toast.success(data.message || "Doctor document uploaded");
     } catch (err) {
@@ -705,17 +703,16 @@ function App() {
   }
 
   async function deleteDoctorDocument(doctorId, docIndex) {
-    if (!doctorId && doctorId !== 0) return;
+    const resolvedDoctorId = getDoctorIdentifier(selectedDoctor) || doctorId;
+    if (!resolvedDoctorId && resolvedDoctorId !== 0) return;
     if (!confirm("Delete this doctor document?")) return;
 
     try {
-      const { data } = await doctorApi.deleteDocument(doctorId, docIndex);
-      if (data?.doctor) {
-        setSelectedDoctor(data.doctor);
-      } else {
-        const refreshed = await doctorApi.get(doctorId);
-        setSelectedDoctor(refreshed.data);
-      }
+      const { data } = await doctorApi.deleteDocument(resolvedDoctorId, docIndex);
+      const refreshId = getDoctorIdentifier(data.doctor) || resolvedDoctorId;
+      const refreshed = await doctorApi.get(refreshId);
+
+      setSelectedDoctor(refreshed.data);
       await load();
       toast.success(data.message || "Doctor document deleted");
     } catch (err) {

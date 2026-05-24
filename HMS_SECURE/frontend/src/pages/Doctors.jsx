@@ -48,6 +48,11 @@ export default function Doctors({
     });
   }
 
+  function getDoctorActionId(row) {
+    if (!row) return "";
+    return row.id || row.doctor_id || row._id || row.doctor_uid || "";
+  }
+
   function formatFileSize(size) {
     const bytes = Number(size || 0);
     if (!bytes) return "";
@@ -64,7 +69,6 @@ export default function Doctors({
         );
 
     const documents = selectedDoctor.certificates || selectedDoctor.documents || [];
-    const profileDoctorKey = selectedDoctor.id || selectedDoctor.doctor_id || selectedDoctor._id || selectedDoctor.doctor_numeric_id;
 
     return (
       <section className="keka-profile-page doctor-keka-profile">
@@ -113,7 +117,7 @@ export default function Doctors({
                       const file = e.target.files?.[0];
                       if (file) {
                         setUploadingDoctorImage(true);
-                        Promise.resolve(uploadDoctorProfileImage(selectedDoctor.id, file))
+                        Promise.resolve(uploadDoctorProfileImage(getDoctorActionId(selectedDoctor), file))
                           .finally(() => setUploadingDoctorImage(false));
                       }
                       e.target.value = "";
@@ -287,7 +291,7 @@ export default function Doctors({
                         if (!doctorDocForm.file) return alert("Please choose a document file");
                         try {
                           setUploadingDoctorDocument(true);
-                          await uploadDoctorDocument(profileDoctorKey, doctorDocForm);
+                          await uploadDoctorDocument(getDoctorActionId(selectedDoctor), doctorDocForm);
                           resetDoctorDocForm();
                           setShowDoctorDocForm(false);
                         } finally {
@@ -348,7 +352,7 @@ export default function Doctors({
                             onClick={async () => {
                               try {
                                 setDeletingDoctorDocumentIndex(index);
-                                await deleteDoctorDocument(profileDoctorKey, index);
+                                await deleteDoctorDocument(getDoctorActionId(selectedDoctor), index);
                               } finally {
                                 setDeletingDoctorDocumentIndex(null);
                               }

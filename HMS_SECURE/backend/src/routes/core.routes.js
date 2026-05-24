@@ -19,53 +19,6 @@ function fileToDataUrl(file) {
     return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
 }
 
-function doctorLookupFilter(req, rawId, extra = {}) {
-    const rawValues = [rawId, req.body?.doctor_id, req.body?.id, req.body?.doctor_numeric_id, req.body?._id]
-        .map((value) => String(value ?? '').trim())
-        .filter(Boolean);
-
-    const or = [];
-    for (const raw of rawValues) {
-        const numericId = Number(raw);
-        if (Number.isFinite(numericId)) or.push({ id: numericId });
-        or.push({ doctor_id: raw });
-        if (/^[a-fA-F0-9]{24}$/.test(raw)) or.push({ _id: raw });
-    }
-
-    // Some screens can accidentally pass the logged-in user/admin id instead of the doctor id.
-    // These fields make the lookup safe for doctor-linked portal accounts without changing existing IDs.
-    const userNumericId = Number(req.user?.id);
-    if (Number.isFinite(userNumericId)) {
-        or.push({ user_id: userNumericId }, { doctor_user_id: userNumericId }, { portal_user_id: userNumericId });
-    }
-    if (req.user?.email) or.push({ email: String(req.user.email).trim().toLowerCase() });
-    if (req.user?.phone) or.push({ phone: String(req.user.phone).trim() });
-
-    const unique = [];
-    const seen = new Set();
-    for (const item of or) {
-        const key = JSON.stringify(item);
-        if (!seen.has(key) && Object.values(item).some((v) => v !== undefined && v !== null && String(v).trim() !== '')) {
-            seen.add(key);
-            unique.push(item);
-        }
-    }
-
-    if (!unique.length) return null;
-    return tenantFilter(req, { ...extra, $or: unique });
-}
-
-async function findDoctorFromParam(req, rawId, extra = {}) {
-    const filter = doctorLookupFilter(req, rawId, extra);
-    if (!filter) return null;
-    return Doctor.findOne(filter);
-}
-
-function doctorEntityId(doctor, fallback) {
-    const numeric = Number(doctor?.id || fallback);
-    return Number.isFinite(numeric) ? numeric : doctor?.doctor_id || String(fallback || '');
-}
-
 async function uploadBufferToCloudinary(file, options) {
     return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(options, (error, uploadResult) => {
@@ -84,6 +37,54 @@ async function safelyDestroyCloudinary(publicId, resourceType = 'auto') {
         console.warn('Cloudinary cleanup skipped:', error?.message || error);
     }
 }
+
+
+function normalizeLookupValue(value) {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+}
+
+async function findDoctorByAnyIdentifier(req, options = {}) {
+    const values = [
+        req.params?.id,
+        req.body?.doctor_id,
+        req.body?.id,
+        req.body?.doctorId,
+        req.query?.doctor_id,
+        req.query?.id,
+        options.id,
+    ].map(normalizeLookupValue).filter(Boolean);
+
+    const seen = new Set();
+    const uniqueValues = values.filter((value) => {
+        if (seen.has(value)) return false;
+        seen.add(value);
+        return true;
+    });
+
+    for (const value of uniqueValues) {
+        const numericId = Number(value);
+        if (Number.isFinite(numericId) && numericId > 0) {
+            const byInternalId = await Doctor.findOne(tenantFilter(req, { id: numericId }));
+            if (byInternalId) return byInternalId;
+        }
+
+        const byDoctorId = await Doctor.findOne(tenantFilter(req, { doctor_id: value }));
+        if (byDoctorId) return byDoctorId;
+
+        if (/^[0-9a-fA-F]{24}$/.test(value)) {
+            const byMongoId = await Doctor.findOne(tenantFilter(req, { _id: value }));
+            if (byMongoId) return byMongoId;
+        }
+    }
+
+    return null;
+}
+
+function getDoctorResponseId(doctor, fallback = '') {
+    return doctor?.id || doctor?.doctor_id || doctor?._id || fallback;
+}
+
 router.use(verifyToken, attachTenant);
 
 
@@ -219,13 +220,9 @@ router.get('/doctors', requirePermission('doctor.view'), asyncHandler(async (req
 
 
 router.get('/doctors/:id', requirePermission('doctor.view'), asyncHandler(async (req, res) => {
-    const doctorNumericId = Number(req.params.id);
-    if (!Number.isFinite(doctorNumericId)) {
-        return res.status(400).json({ message: 'Invalid doctor id' });
-    }
-
-    const doctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId })).lean();
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorDoc = await findDoctorByAnyIdentifier(req);
+    if (!doctorDoc) return res.status(404).json({ message: 'Doctor not found' });
+    const doctor = doctorDoc.toObject ? doctorDoc.toObject() : doctorDoc;
 
     let departmentName = '';
     if (doctor.department_id) {
@@ -322,13 +319,9 @@ router.put('/doctors/:id', requirePermission('doctor.edit'), asyncHandler(async 
 
 
 router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), upload.single('profile_image'), asyncHandler(async (req, res) => {
-    const doctorNumericId = Number(req.params.id);
-    if (!Number.isFinite(doctorNumericId)) {
-        return res.status(400).json({ message: 'Invalid doctor id' });
-    }
-
-    const doctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId }));
+    const doctor = await findDoctorByAnyIdentifier(req);
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
 
     if (!req.file) {
         return res.status(400).json({ message: 'Profile image is required' });
@@ -381,14 +374,9 @@ router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), uplo
 
 
 router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'), upload.single('document'), asyncHandler(async (req, res) => {
-    const doctor = await findDoctorFromParam(req, req.params.id);
-    if (!doctor) {
-        return res.status(404).json({
-            message: 'Doctor not found',
-            hint: 'The document upload URL must use the doctor numeric id or doctor_id from the Doctors table, not the logged-in user/admin id.',
-        });
-    }
-    const doctorNumericId = doctorEntityId(doctor, req.params.id);
+    const doctor = await findDoctorByAnyIdentifier(req);
+    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
 
     if (!req.file) {
         return res.status(400).json({ message: 'Document file is required' });
@@ -462,9 +450,9 @@ router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.docu
         return res.status(400).json({ message: 'Invalid doctor document request' });
     }
 
-    const doctor = await findDoctorFromParam(req, req.params.id);
+    const doctor = await findDoctorByAnyIdentifier(req);
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
-    const doctorNumericId = doctorEntityId(doctor, req.params.id);
+    const doctorNumericId = getDoctorResponseId(doctor, req.params.id);
 
     const doc = doctor.certificates?.[docIndex];
     if (!doc) return res.status(404).json({ message: 'Document not found' });
