@@ -256,7 +256,6 @@ const Doctor = makeModel("Doctor", "doctors", {
             file_size: Number,
             file_url: String,
             file_public_id: String,
-            storage: String,
             uploaded_at: {
                 type: Date,
                 default: Date.now,
@@ -301,9 +300,7 @@ const Appointment = makeModel("Appointment", "appointments", {
     appointment_time: String,
     appointment_type: { type: String, default: "opd" },
     status: { type: String, default: "scheduled" },
-    // Canonical visible queue token. Format: YYYYMMDD-001, unique per hospital per date.
-    token_number: { type: String, trim: true },
-    token_sequence: { type: Number, default: 0, index: true },
+    token_number: String,
     checked_in_at: Date,
     consultation_started_at: Date,
     completed_at: Date,
@@ -324,19 +321,6 @@ Appointment.schema.index(
 Appointment.schema.index(
     { hospital_id: 1, appointment_date: 1, token_number: 1 },
     { name: "appointment_daily_token_lookup" },
-);
-Appointment.schema.index(
-    { hospital_id: 1, appointment_date: 1, token_sequence: 1 },
-    { name: "appointment_daily_token_sequence_lookup" },
-);
-const AppointmentTokenCounter = makeModel("AppointmentTokenCounter", "appointment_token_counters", {
-    hospital_id: { type: Number, default: 1, index: true },
-    appointment_date: { type: String, required: true, index: true },
-    seq: { type: Number, default: 0 },
-});
-AppointmentTokenCounter.schema.index(
-    { hospital_id: 1, appointment_date: 1 },
-    { unique: true, name: "appointment_token_counter_hospital_date_unique" },
 );
 const Bed = makeModel("Bed", "beds", {
     hospital_id: { type: Number, default: 1, index: true },
@@ -2112,7 +2096,6 @@ module.exports = {
     Doctor,
     DoctorSchedule,
     Appointment,
-    AppointmentTokenCounter,
     Bed,
     OpdRecord,
     IpdAdmission,

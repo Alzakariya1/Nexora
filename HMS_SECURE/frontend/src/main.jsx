@@ -103,7 +103,6 @@ const TwoFactorSecurity = lazy(() => import("./pages/TwoFactorSecurity"));
 const AuditCompliance = lazy(() => import("./pages/AuditCompliance"));
 const PilotDeploymentCenter = lazy(() => import("./pages/PilotDeploymentCenter"));
 import { DEFAULT_ENABLED_MODULES, DEFAULT_FEATURE_FLAGS, filterTabsByPermissions, hasPermission, normalizeFeatureFlags } from "./utils";
-import { getDoctorPublicId, getPatientPublicId, findDoctorByAnyId, findPatientByAnyId, normalizeAppointmentForApi } from "./utils/hmsIds";
 import "./style.css";
 
 
@@ -164,7 +163,6 @@ const emptyLab = { patient_id: "", doctor_id: "", template_id: "", test_name: ""
 const emptyRad = { patient_id: "", doctor_id: "", scan_name: "", scan_category: "General", modality: "XRAY", body_part: "", priority: "routine", dicom_study_id: "", pacs_viewer_url: "", notes: "" };
 const emptyMed = { name: "", generic_name: "", category: "", batch_number: "", vendor: "", expiry_date: "", quantity: "", low_stock_threshold: 10, cost_price: "", selling_price: "", unit: "pcs", status: "active" };
 const emptyBill = { patient_id: "", amount: "", status: "unpaid" };
-const cleanDoctorId = (value) => (value === undefined || value === null ? "" : String(value).trim());
 
 function App() {
   const [user, setUser] = useState(() =>
@@ -349,19 +347,15 @@ function App() {
 
     try {
       let savedPatientId = editingPatientId;
-      let savedPatient = findPatientByAnyId(patients, editingPatientId) || null;
 
       let duplicateWarnings = [];
       if (editingPatientId) {
         const { data } = await patientApi.update(editingPatientId, patient);
-        savedPatient = data?.patient || savedPatient;
-        savedPatientId = getPatientPublicId(savedPatient) || savedPatientId;
         duplicateWarnings = data?.duplicate_warnings || [];
         toast.success("Patient updated successfully");
       } else {
         const { data } = await patientApi.create(patient);
-        savedPatient = data?.patient || null;
-        savedPatientId = data.public_id || getPatientPublicId(savedPatient) || data.id;
+        savedPatientId = data.id;
         duplicateWarnings = data?.duplicate_warnings || [];
         toast.success("Patient added successfully");
       }
@@ -404,7 +398,6 @@ function App() {
 
       setSavedPatientDocs((prev) => ({
         ...prev,
-        [savedPatientId]: uploadedDocs,
         [patient.patient_id]: uploadedDocs,
       }));
 
@@ -475,9 +468,9 @@ function App() {
       custom_fields: row.custom_fields || {},
     });
 
-    setEditingPatientId(getPatientPublicId(row) || row._id);
+    setEditingPatientId(row.id || row._id);
     setPendingPatientDocs(
-      row.documents || savedPatientDocs[getPatientPublicId(row)] || savedPatientDocs[row.patient_id] || [],
+      row.documents || savedPatientDocs[row.patient_id] || [],
     );
 
     setPatientProfilePreview(row.profile_image_url || "");
@@ -488,7 +481,7 @@ function App() {
     if (!confirm("Delete this patient?")) return;
 
     try {
-      await patientApi.delete(getPatientPublicId(row) || row._id);
+      await patientApi.delete(row.id || row._id);
       await load();
       toast.success("Patient archived successfully");
     } catch (err) {
@@ -584,10 +577,7 @@ function App() {
     if (!reason) return;
     try {
       const { data } = await patientApi.deleteDocument(patientId, docIndex, reason);
-      setSelectedPatient((prev) => {
-        const prevId = getPatientPublicId(prev || {});
-        return prev && String(prevId) === String(patientId) ? { ...prev, documents: data.documents || [] } : prev;
-      });
+      setSelectedPatient((prev) => prev && String(prev.id) === String(patientId) ? { ...prev, documents: data.documents || [] } : prev);
       await load();
       toast.success("Patient document deleted successfully");
     } catch (err) {
@@ -619,13 +609,12 @@ function App() {
   }
 
   async function openDoctorProfile(row) {
-    const fallbackDoctor = findDoctorByAnyId(doctors, row.public_id || row.id || row.doctor_id || row._id) || row;
-    const doctorLookupId = getDoctorPublicId(fallbackDoctor) || getDoctorPublicId(row) || row.doctor_id || row._id;
+    const fallbackDoctor = doctors.find((d) => d.id === row.id || d.doctor_id === row.doctor_id) || row;
     setSelectedDoctor(fallbackDoctor);
     setTab("doctorProfile");
 
     try {
-      const { data } = await doctorApi.get(doctorLookupId);
+      const { data } = await doctorApi.get(row.id || row._id);
       setSelectedDoctor(data);
     } catch (err) {
       toast.error(err.response?.data?.message || "Could not refresh doctor profile");
@@ -633,9 +622,7 @@ function App() {
   }
 
   async function uploadDoctorProfileImage(doctorId, file) {
-    const resolvedDoctor = findDoctorByAnyId(doctors, doctorId) || selectedDoctor || {};
-    const stableDoctorId = getDoctorPublicId(resolvedDoctor) || cleanDoctorId(doctorId);
-    if (!stableDoctorId || !file) return;
+    if (!doctorId || !file) return;
 
     const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!allowedTypes.includes(file.type)) {
@@ -652,8 +639,8 @@ function App() {
       const formData = new FormData();
       formData.append("profile_image", file);
 
-      const { data } = await doctorApi.uploadProfileImage(stableDoctorId, formData);
-      const refreshed = await doctorApi.get(stableDoctorId);
+      const { data } = await doctorApi.uploadProfileImage(doctorId, formData);
+      const refreshed = await doctorApi.get(doctorId);
 
       setSelectedDoctor(refreshed.data);
       await load();
@@ -665,9 +652,7 @@ function App() {
 
 
   async function uploadDoctorDocument(doctorId, payload) {
-    const resolvedDoctor = findDoctorByAnyId(doctors, doctorId) || selectedDoctor || {};
-    const stableDoctorId = getDoctorPublicId(resolvedDoctor) || cleanDoctorId(doctorId);
-    if (!stableDoctorId || !payload?.file) return;
+    if (!doctorId || !payload?.file) return;
 
     const allowedTypes = [
       "application/pdf",
@@ -695,14 +680,9 @@ function App() {
       formData.append("document_type", payload.document_type || "Certificate");
       formData.append("category", payload.category || "credential");
       formData.append("notes", payload.notes || "");
-      formData.append("doctor_id", resolvedDoctor?.doctor_id || stableDoctorId);
-      formData.append("doctor_code", resolvedDoctor?.doctor_id || stableDoctorId);
-      if (resolvedDoctor?.id) formData.append("numeric_id", resolvedDoctor.id);
-      if (resolvedDoctor?.public_id) formData.append("public_id", resolvedDoctor.public_id);
-      if (resolvedDoctor?._id) formData.append("mongo_id", resolvedDoctor._id);
 
-      const { data } = await doctorApi.uploadDocument(stableDoctorId, formData);
-      const refreshed = data?.doctor ? { data: data.doctor } : await doctorApi.get(stableDoctorId);
+      const { data } = await doctorApi.uploadDocument(doctorId, formData);
+      const refreshed = await doctorApi.get(doctorId);
 
       setSelectedDoctor(refreshed.data);
       await load();
@@ -713,14 +693,12 @@ function App() {
   }
 
   async function deleteDoctorDocument(doctorId, docIndex) {
-    const resolvedDoctor = findDoctorByAnyId(doctors, doctorId) || selectedDoctor || {};
-    const stableDoctorId = getDoctorPublicId(resolvedDoctor) || cleanDoctorId(doctorId);
-    if (!stableDoctorId && stableDoctorId !== 0) return;
+    if (!doctorId && doctorId !== 0) return;
     if (!confirm("Delete this doctor document?")) return;
 
     try {
-      const { data } = await doctorApi.deleteDocument(stableDoctorId, docIndex);
-      const refreshed = data?.doctor ? { data: data.doctor } : await doctorApi.get(stableDoctorId);
+      const { data } = await doctorApi.deleteDocument(doctorId, docIndex);
+      const refreshed = await doctorApi.get(doctorId);
 
       setSelectedDoctor(refreshed.data);
       await load();
@@ -791,11 +769,11 @@ function App() {
 
     try {
       if (editingAppointmentId) {
-        await appointmentApi.update(editingAppointmentId, normalizeAppointmentForApi(appointment, doctors, patients));
+        await appointmentApi.update(editingAppointmentId, appointment);
         toast.success("Appointment updated successfully");
         setEditingAppointmentId(null);
       } else {
-        await appointmentApi.create(normalizeAppointmentForApi(appointment, doctors, patients));
+        await appointmentApi.create(appointment);
         toast.success("Appointment added successfully");
       }
 
@@ -807,12 +785,10 @@ function App() {
   }
 
   function editAppointment(row) {
-    const matchedDoctor = findDoctorByAnyId(doctors, row.doctor_id);
-    const matchedPatient = patients.find((p) => String(p.id) === String(row.patient_id) || String(p.patient_id) === String(row.patient_id));
     setAppointment({
       id: row.id || row._id,
-      patient_id: matchedPatient ? getPatientPublicId(matchedPatient) : row.patient_id || "",
-      doctor_id: matchedDoctor ? getDoctorPublicId(matchedDoctor) : row.doctor_id || "",
+      patient_id: row.patient_id || "",
+      doctor_id: row.doctor_id || "",
       appointment_date: row.appointment_date || "",
       appointment_time: row.appointment_time || "",
       appointment_type: row.appointment_type || "opd",

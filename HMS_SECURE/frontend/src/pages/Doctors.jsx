@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { DataTable, Form } from "../components";
-import { cleanId, findDoctorByAnyId, getDoctorPublicId } from "../utils/hmsIds";
 
 export default function Doctors({
   doctor,
@@ -54,12 +53,6 @@ export default function Doctors({
     if (!bytes) return "";
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  function getStableDoctorId(row = selectedDoctor) {
-    const lookupValue = row?.doctor_id || row?.public_id || row?.id || row?._id;
-    const latestDoctor = findDoctorByAnyId(paginatedDoctors || [], lookupValue) || row || selectedDoctor || {};
-    return getDoctorPublicId(latestDoctor) || cleanId(latestDoctor._id) || cleanId(lookupValue);
   }
 
   if (activeView === "doctorProfile" && selectedDoctor) {
@@ -119,7 +112,7 @@ export default function Doctors({
                       const file = e.target.files?.[0];
                       if (file) {
                         setUploadingDoctorImage(true);
-                        Promise.resolve(uploadDoctorProfileImage(getStableDoctorId(), file))
+                        Promise.resolve(uploadDoctorProfileImage(selectedDoctor.id, file))
                           .finally(() => setUploadingDoctorImage(false));
                       }
                       e.target.value = "";
@@ -293,7 +286,7 @@ export default function Doctors({
                         if (!doctorDocForm.file) return alert("Please choose a document file");
                         try {
                           setUploadingDoctorDocument(true);
-                          await uploadDoctorDocument(getStableDoctorId(), doctorDocForm);
+                          await uploadDoctorDocument(selectedDoctor.id, doctorDocForm);
                           resetDoctorDocForm();
                           setShowDoctorDocForm(false);
                         } finally {
@@ -354,7 +347,7 @@ export default function Doctors({
                             onClick={async () => {
                               try {
                                 setDeletingDoctorDocumentIndex(index);
-                                await deleteDoctorDocument(getStableDoctorId(), index);
+                                await deleteDoctorDocument(selectedDoctor.id, index);
                               } finally {
                                 setDeletingDoctorDocumentIndex(null);
                               }
