@@ -64,7 +64,7 @@ export default function Doctors({
         );
 
     const documents = selectedDoctor.certificates || selectedDoctor.documents || [];
-    const profileDoctorKey = selectedDoctor.id || selectedDoctor.doctor_id || selectedDoctor._id;
+    const profileDoctorKey = selectedDoctor.id || selectedDoctor.doctor_id || selectedDoctor._id || selectedDoctor.doctor_numeric_id;
 
     return (
       <section className="keka-profile-page doctor-keka-profile">

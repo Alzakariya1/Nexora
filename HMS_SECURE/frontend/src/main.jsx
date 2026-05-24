@@ -608,13 +608,20 @@ function App() {
     setEditingDoctorId(null);
   }
 
+  function getDoctorRecordId(row = {}) {
+    return row.id || row.doctor_id || row._id || row.doctor_numeric_id;
+  }
+
   async function openDoctorProfile(row) {
-    const fallbackDoctor = doctors.find((d) => d.id === row.id || d.doctor_id === row.doctor_id) || row;
+    const fallbackDoctor = doctors.find((d) => String(d.id) === String(row.id) || String(d.doctor_id) === String(row.doctor_id)) || row;
     setSelectedDoctor(fallbackDoctor);
     setTab("doctorProfile");
 
+    const doctorRecordId = getDoctorRecordId(fallbackDoctor);
+    if (!doctorRecordId) return;
+
     try {
-      const { data } = await doctorApi.get(row.id || row._id);
+      const { data } = await doctorApi.get(doctorRecordId);
       setSelectedDoctor(data);
     } catch (err) {
       toast.error(err.response?.data?.message || "Could not refresh doctor profile");
@@ -680,11 +687,16 @@ function App() {
       formData.append("document_type", payload.document_type || "Certificate");
       formData.append("category", payload.category || "credential");
       formData.append("notes", payload.notes || "");
+      formData.append("doctor_id", String(doctorId));
+      formData.append("doctor_numeric_id", String(doctorId));
 
       const { data } = await doctorApi.uploadDocument(doctorId, formData);
-      const refreshed = await doctorApi.get(doctorId);
-
-      setSelectedDoctor(refreshed.data);
+      if (data?.doctor) {
+        setSelectedDoctor(data.doctor);
+      } else {
+        const refreshed = await doctorApi.get(doctorId);
+        setSelectedDoctor(refreshed.data);
+      }
       await load();
       toast.success(data.message || "Doctor document uploaded");
     } catch (err) {
@@ -698,9 +710,12 @@ function App() {
 
     try {
       const { data } = await doctorApi.deleteDocument(doctorId, docIndex);
-      const refreshed = await doctorApi.get(doctorId);
-
-      setSelectedDoctor(refreshed.data);
+      if (data?.doctor) {
+        setSelectedDoctor(data.doctor);
+      } else {
+        const refreshed = await doctorApi.get(doctorId);
+        setSelectedDoctor(refreshed.data);
+      }
       await load();
       toast.success(data.message || "Doctor document deleted");
     } catch (err) {

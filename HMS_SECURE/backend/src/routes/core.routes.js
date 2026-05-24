@@ -20,13 +20,39 @@ function fileToDataUrl(file) {
 }
 
 function doctorLookupFilter(req, rawId, extra = {}) {
-    const raw = String(rawId || '').trim();
-    const numericId = Number(raw);
+    const rawValues = [rawId, req.body?.doctor_id, req.body?.id, req.body?.doctor_numeric_id, req.body?._id]
+        .map((value) => String(value ?? '').trim())
+        .filter(Boolean);
+
     const or = [];
-    if (Number.isFinite(numericId)) or.push({ id: numericId });
-    if (raw) or.push({ doctor_id: raw });
-    if (!or.length) return null;
-    return tenantFilter(req, { ...extra, $or: or });
+    for (const raw of rawValues) {
+        const numericId = Number(raw);
+        if (Number.isFinite(numericId)) or.push({ id: numericId });
+        or.push({ doctor_id: raw });
+        if (/^[a-fA-F0-9]{24}$/.test(raw)) or.push({ _id: raw });
+    }
+
+    // Some screens can accidentally pass the logged-in user/admin id instead of the doctor id.
+    // These fields make the lookup safe for doctor-linked portal accounts without changing existing IDs.
+    const userNumericId = Number(req.user?.id);
+    if (Number.isFinite(userNumericId)) {
+        or.push({ user_id: userNumericId }, { doctor_user_id: userNumericId }, { portal_user_id: userNumericId });
+    }
+    if (req.user?.email) or.push({ email: String(req.user.email).trim().toLowerCase() });
+    if (req.user?.phone) or.push({ phone: String(req.user.phone).trim() });
+
+    const unique = [];
+    const seen = new Set();
+    for (const item of or) {
+        const key = JSON.stringify(item);
+        if (!seen.has(key) && Object.values(item).some((v) => v !== undefined && v !== null && String(v).trim() !== '')) {
+            seen.add(key);
+            unique.push(item);
+        }
+    }
+
+    if (!unique.length) return null;
+    return tenantFilter(req, { ...extra, $or: unique });
 }
 
 async function findDoctorFromParam(req, rawId, extra = {}) {

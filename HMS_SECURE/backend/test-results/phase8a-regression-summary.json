@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-23T10:02:47.489Z",
+  "generated_at": "2026-05-24T06:52:22.100Z",
   "total": 24,
   "passed": 24,
   "failed": 0,
@@ -7,122 +7,122 @@
     {
       "script": "check-routes",
       "status": 0,
-      "durationMs": 2798
+      "durationMs": 876
     },
     {
       "script": "tenant:audit",
       "status": 0,
-      "durationMs": 601
+      "durationMs": 201
     },
     {
       "script": "tenant:safety-check",
       "status": 0,
-      "durationMs": 1879
+      "durationMs": 595
     },
     {
       "script": "check:plan-limits",
       "status": 0,
-      "durationMs": 680
+      "durationMs": 222
     },
     {
       "script": "check:saas-onboarding",
       "status": 0,
-      "durationMs": 684
+      "durationMs": 202
     },
     {
       "script": "check:tenant-backup-restore-export",
       "status": 0,
-      "durationMs": 624
+      "durationMs": 191
     },
     {
       "script": "check:tenant-backup-restore-export-continuation",
       "status": 0,
-      "durationMs": 601
+      "durationMs": 195
     },
     {
       "script": "check:phase5a-reports",
       "status": 0,
-      "durationMs": 632
+      "durationMs": 198
     },
     {
       "script": "check:phase5b-reports",
       "status": 0,
-      "durationMs": 651
+      "durationMs": 197
     },
     {
       "script": "check:phase5c-reports",
       "status": 0,
-      "durationMs": 614
+      "durationMs": 194
     },
     {
       "script": "check:phase5d-command-center",
       "status": 0,
-      "durationMs": 602
+      "durationMs": 206
     },
     {
       "script": "check:phase6a-ot-surgery",
       "status": 0,
-      "durationMs": 623
+      "durationMs": 196
     },
     {
       "script": "check:phase6b-nursing",
       "status": 0,
-      "durationMs": 602
+      "durationMs": 198
     },
     {
       "script": "check:phase6c-emergency",
       "status": 0,
-      "durationMs": 608
+      "durationMs": 194
     },
     {
       "script": "check:phase6d-blood-bank",
       "status": 0,
-      "durationMs": 628
+      "durationMs": 197
     },
     {
       "script": "check:phase6e-hr-staff",
       "status": 0,
-      "durationMs": 640
+      "durationMs": 192
     },
     {
       "script": "check:phase6f-patient-portal",
       "status": 0,
-      "durationMs": 597
+      "durationMs": 192
     },
     {
       "script": "check:phase6g-doctor-portal",
       "status": 0,
-      "durationMs": 683
+      "durationMs": 196
     },
     {
       "script": "check:phase7a-fhir",
       "status": 0,
-      "durationMs": 601
+      "durationMs": 212
     },
     {
       "script": "check:phase7b-hl7",
       "status": 0,
-      "durationMs": 651
+      "durationMs": 193
     },
     {
       "script": "check:phase7c-pacs-dicom",
       "status": 0,
-      "durationMs": 604
+      "durationMs": 190
     },
     {
       "script": "check:phase7d-abdm-abha",
       "status": 0,
-      "durationMs": 617
+      "durationMs": 212
     },
     {
       "script": "check:phase7e-erp-tally",
       "status": 0,
-      "durationMs": 615
+      "durationMs": 213
     },
     {
       "script": "check:phase7f-communications",
       "status": 0,
-      "durationMs": 672
+      "durationMs": 209
     }
   ]
 }
