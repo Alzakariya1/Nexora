@@ -2624,7 +2624,7 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  padding: 0 15px;
+  padding: 0 0px;
   /* border-radius: 999px;
   background: color-mix(in srgb, #ffffff 16%, transparent); */
   color: #fff;
