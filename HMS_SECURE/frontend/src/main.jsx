@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import {
@@ -29,10 +29,13 @@ import {
   FileHeart,
   PackageSearch,
   BarChart3,
+  LineChart,
   ServerCog,
   Presentation,
   Scale,
 Rocket,
+  Droplets,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { Toaster, toast } from "react-hot-toast";
 import {
@@ -53,47 +56,52 @@ import {
   saasApi,
   emrApi,
   integrationApi,
+  ipdApi,
 } from "./api";
 import { AppLayout } from "./layouts";
-import {
-  AdminProfile,
-  Appointments,
-  Beds,
-  Billing,
-  Dashboard,
-  Doctors,
-  Labs,
-  Login,
-  Patients,
-  Pharmacy,
-  TenantControl,
-  AuditSecurity,
-  Configuration,
-  SaasControl,
-  Communications,
-  PatientPortal,
-  DoctorPortal,
-  EMR,
-  InsuranceTPA,
-  Inventory,
-  ComplianceCenter,
-  IntegrationCenter,
-  CommandCenter,
-  ProductionOps,
-  SalesDemoCenter,
-  LegalSecurityCenter,
-  AdvancedFeaturePage,
-  FHIRAPIs,
-  WhatsAppSMS,
-  HL7Ready,
-  PACSDicom,
-  Biometric,
-  ERPTally,
-  ABDMABHA,
-  TwoFactorSecurity,
-  AuditCompliance,
-PilotDeploymentCenter,
-} from "./pages";
+const AdminProfile = lazy(() => import("./pages/AdminProfile"));
+const Appointments = lazy(() => import("./pages/Appointments"));
+const Beds = lazy(() => import("./pages/Beds"));
+const Billing = lazy(() => import("./pages/Billing"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Doctors = lazy(() => import("./pages/Doctors"));
+const Labs = lazy(() => import("./pages/Labs"));
+const Login = lazy(() => import("./pages/Login"));
+const Patients = lazy(() => import("./pages/Patients"));
+const Pharmacy = lazy(() => import("./pages/Pharmacy"));
+const TenantControl = lazy(() => import("./pages/TenantControl"));
+const AuditSecurity = lazy(() => import("./pages/AuditSecurity"));
+const Configuration = lazy(() => import("./pages/Configuration"));
+const SaasControl = lazy(() => import("./pages/SaasControl"));
+const Communications = lazy(() => import("./pages/Communications"));
+const PatientPortal = lazy(() => import("./pages/PatientPortal"));
+const DoctorPortal = lazy(() => import("./pages/DoctorPortal"));
+const EMR = lazy(() => import("./pages/EMR"));
+const IPD = lazy(() => import("./pages/IPD"));
+const InsuranceTPA = lazy(() => import("./pages/InsuranceTPA"));
+const Inventory = lazy(() => import("./pages/Inventory"));
+const ComplianceCenter = lazy(() => import("./pages/ComplianceCenter"));
+const IntegrationCenter = lazy(() => import("./pages/IntegrationCenter"));
+const CommandCenter = lazy(() => import("./pages/CommandCenter"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Nursing = lazy(() => import("./pages/Nursing"));
+const Emergency = lazy(() => import("./pages/Emergency"));
+const BloodBank = lazy(() => import("./pages/BloodBank"));
+const HRStaff = lazy(() => import("./pages/HRStaff"));
+const ProductionOps = lazy(() => import("./pages/ProductionOps"));
+const SalesDemoCenter = lazy(() => import("./pages/SalesDemoCenter"));
+const LegalSecurityCenter = lazy(() => import("./pages/LegalSecurityCenter"));
+const AdvancedFeaturePage = lazy(() => import("./pages/AdvancedFeaturePage"));
+const FHIRAPIs = lazy(() => import("./pages/FHIRAPIs"));
+const WhatsAppSMS = lazy(() => import("./pages/WhatsAppSMS"));
+const HL7Ready = lazy(() => import("./pages/HL7Ready"));
+const PACSDicom = lazy(() => import("./pages/PACSDicom"));
+const Biometric = lazy(() => import("./pages/Biometric"));
+const ERPTally = lazy(() => import("./pages/ERPTally"));
+const ABDMABHA = lazy(() => import("./pages/ABDMABHA"));
+const TwoFactorSecurity = lazy(() => import("./pages/TwoFactorSecurity"));
+const AuditCompliance = lazy(() => import("./pages/AuditCompliance"));
+const PilotDeploymentCenter = lazy(() => import("./pages/PilotDeploymentCenter"));
 import { DEFAULT_ENABLED_MODULES, DEFAULT_FEATURE_FLAGS, filterTabsByPermissions, hasPermission, normalizeFeatureFlags } from "./utils";
 import "./style.css";
 
@@ -224,6 +232,7 @@ function App() {
   const [appointments, setAppointments] = useState([]);
   const [doctorSchedules, setDoctorSchedules] = useState([]);
   const [beds, setBeds] = useState([]);
+  const [ipdAdmissions, setIpdAdmissions] = useState([]);
   const [labs, setLabs] = useState([]);
   const [rads, setRads] = useState([]);
   const [meds, setMeds] = useState([]);
@@ -240,11 +249,14 @@ function App() {
     role: "receptionist",
     profile_image: "",
     bio: "",
+    permissions: [],
   });
   const [usersList, setUsersList] = useState([]);
   const [dynamicFields, setDynamicFields] = useState([]);
   const [userSearch, setUserSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [permissionCatalog, setPermissionCatalog] = useState([]);
+  const [manageableRoles, setManageableRoles] = useState([]);
 
   const [patient, setPatient] = useState(emptyPatient);
   const [doctor, setDoctor] = useState(emptyDoctor);
@@ -288,6 +300,7 @@ function App() {
       appointmentApi.list(),
       doctorScheduleApi.list(),
       bedApi.list(),
+      ipdApi.list(),
       labApi.list(),
       radiologyApi.list(),
       labApi.templates(),
@@ -295,14 +308,16 @@ function App() {
       billingApi.list(),
       authApi.getUsers(),
       configurationApi.listPublicFields(),
+      authApi.getPermissions(),
     ];
-    const [s, p, d, a, ds, b, l, r, lt, m, bi, u, cf] = await Promise.allSettled(calls);
+    const [s, p, d, a, ds, b, ipd, l, r, lt, m, bi, u, cf, perms] = await Promise.allSettled(calls);
     if (s.value) setStats(s.value.data);
     if (p.value) setPatients(p.value.data);
     if (d.value) setDoctors(d.value.data);
     if (a.value) setAppointments(a.value.data);
     if (ds.value) setDoctorSchedules(ds.value.data);
     if (b.value) setBeds(b.value.data);
+    if (ipd.value) setIpdAdmissions(ipd.value.data);
     if (l.value) setLabs(l.value.data);
     if (r.value) setRads(r.value.data);
     if (lt.value) setLabTemplates(lt.value.data);
@@ -310,6 +325,10 @@ function App() {
     if (bi.value) setBills(bi.value.data);
     if (u.value) setUsersList(u.value.data);
     if (cf.value) setDynamicFields(cf.value.data);
+    if (perms.value) {
+      setPermissionCatalog(perms.value.data?.catalog || []);
+      setManageableRoles(perms.value.data?.manageableRoles || []);
+    }
     if (hasPermission(user, "hospital.manage")) {
       try {
         const { data: tenantRows } = await tenantApi.list();
@@ -329,13 +348,20 @@ function App() {
     try {
       let savedPatientId = editingPatientId;
 
+      let duplicateWarnings = [];
       if (editingPatientId) {
-        await patientApi.update(editingPatientId, patient);
+        const { data } = await patientApi.update(editingPatientId, patient);
+        duplicateWarnings = data?.duplicate_warnings || [];
         toast.success("Patient updated successfully");
       } else {
         const { data } = await patientApi.create(patient);
         savedPatientId = data.id;
+        duplicateWarnings = data?.duplicate_warnings || [];
         toast.success("Patient added successfully");
+      }
+
+      if (duplicateWarnings.length > 0) {
+        toast(`Possible duplicate patient found: ${duplicateWarnings[0].full_name || duplicateWarnings[0].patient_id}`);
       }
       if (patientProfileImage && savedPatientId) {
         const imageFormData = new FormData();
@@ -457,7 +483,7 @@ function App() {
     try {
       await patientApi.delete(row.id || row._id);
       await load();
-      toast.success("Patient deleted successfully");
+      toast.success("Patient archived successfully");
     } catch (err) {
       toast.error(err.response?.data?.message || "Delete failed");
     }
@@ -466,12 +492,6 @@ function App() {
     const file = e.target.files?.[0];
 
     if (!file) return;
-
-    if (!patient.patient_id) {
-      toast.error("Please enter Patient ID before uploading document");
-      e.target.value = "";
-      return;
-    }
 
     const allowedTypes = [
       "application/pdf",
@@ -548,8 +568,21 @@ function App() {
     toast.success("Patient profile image selected");
   }
   function removePendingPatientDocument(docId) {
-    setPendingPatientDocs((prev) => prev.filter((doc) => doc.id !== docId));
+    setPendingPatientDocs((prev) => prev.filter((doc, index) => (doc.id ?? index) !== docId));
     toast.success("Document removed");
+  }
+
+  async function deletePatientDocument(patientId, docIndex) {
+    const reason = prompt("Reason for deleting this patient document:");
+    if (!reason) return;
+    try {
+      const { data } = await patientApi.deleteDocument(patientId, docIndex, reason);
+      setSelectedPatient((prev) => prev && String(prev.id) === String(patientId) ? { ...prev, documents: data.documents || [] } : prev);
+      await load();
+      toast.success("Patient document deleted successfully");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Document delete failed");
+    }
   }
   function editDoctor(row, options = {}) {
     setDoctor({
@@ -681,7 +714,7 @@ function App() {
     try {
       await doctorApi.delete(row.id || row._id);
       await load();
-      toast.success("Doctor deleted successfully");
+      toast.success("Doctor archived successfully");
     } catch (err) {
       toast.error(err.response?.data?.message || "Delete failed");
     }
@@ -753,6 +786,7 @@ function App() {
 
   function editAppointment(row) {
     setAppointment({
+      id: row.id || row._id,
       patient_id: row.patient_id || "",
       doctor_id: row.doctor_id || "",
       appointment_date: row.appointment_date || "",
@@ -760,18 +794,22 @@ function App() {
       appointment_type: row.appointment_type || "opd",
       status: row.status || "scheduled",
       notes: row.notes || "",
+      reschedule_reason: "",
+      original_doctor_id: row.doctor_id || "",
+      original_appointment_date: row.appointment_date || "",
+      original_appointment_time: row.appointment_time || "",
     });
 
     setEditingAppointmentId(row.id || row._id);
   }
 
   async function deleteAppointment(row) {
-    if (!confirm("Delete this appointment?")) return;
+    if (!confirm("Archive this appointment? It will be hidden from normal appointment lists but kept for audit history.")) return;
 
     try {
       await appointmentApi.delete(row.id || row._id);
       await load();
-      toast.success("Appointment deleted successfully");
+      toast.success("Appointment archived successfully");
     } catch (err) {
       toast.error(err.response?.data?.message || "Delete failed");
     }
@@ -781,8 +819,22 @@ function App() {
     const appointmentId = row.id || row._id;
     if (!appointmentId) return;
 
+    const extra = {};
+    if (status === "cancelled") {
+      const reason = prompt("Cancellation reason is required for audit trail:");
+      if (!reason?.trim()) {
+        toast.error("Cancellation reason is required");
+        return;
+      }
+      extra.cancellation_reason = reason.trim();
+    }
+    if (status === "no_show") {
+      const reason = prompt("Optional no-show note/reason:") || "";
+      if (reason.trim()) extra.no_show_reason = reason.trim();
+    }
+
     try {
-      await appointmentApi.updateStatus(appointmentId, status);
+      await appointmentApi.updateStatus(appointmentId, status, extra);
       await load();
       toast.success(`Appointment marked as ${status.replaceAll("_", " ")}`);
     } catch (err) {
@@ -855,6 +907,18 @@ function App() {
     await load();
   }
 
+
+  async function archiveLabOrder(id) {
+    const reason = prompt("Archive reason is required for audit trail:");
+    if (!reason?.trim()) {
+      toast.error("Archive reason is required");
+      return;
+    }
+    await labApi.archive(id, reason.trim());
+    toast.success("Lab order archived");
+    await load();
+  }
+
   async function updateRadiologyStatus(id, status) {
     await radiologyApi.updateStatus(id, status);
     toast.success("Radiology status updated");
@@ -867,6 +931,18 @@ function App() {
     await load();
   }
 
+
+  async function archiveRadiologyOrder(id) {
+    const reason = prompt("Archive reason is required for audit trail:");
+    if (!reason?.trim()) {
+      toast.error("Archive reason is required");
+      return;
+    }
+    await radiologyApi.archive(id, reason.trim());
+    toast.success("Radiology order archived");
+    await load();
+  }
+
   async function addMedicine(e) {
     e.preventDefault();
     await pharmacyApi.create(med);
@@ -876,8 +952,58 @@ function App() {
 
   async function addBill(e) {
     e.preventDefault();
-    await billingApi.create(bill);
+    const invoiceId = bill.id || bill.billingId;
+    if (invoiceId) {
+      await billingApi.update(invoiceId, bill);
+      toast.success("Invoice updated");
+    } else {
+      await billingApi.create(bill);
+      toast.success("Invoice created");
+    }
     setBill(emptyBill);
+    await load();
+  }
+
+  function editBill(row) {
+    setBill({
+      ...emptyBill,
+      ...row,
+      amount: row.amount || row.total_amount || "",
+      total_amount: row.total_amount || row.amount || "",
+      payment_status: row.payment_status || row.status || "pending",
+      status: row.payment_status || row.status || "pending",
+      payment_mode: row.payment_mode || "cash",
+      service_type: row.service_type || "opd",
+    });
+  }
+
+  async function updateBillPayment(row) {
+    const currentTotal = Number(row.total_amount || row.amount || 0);
+    const value = window.prompt(`Paid amount for ${row.invoice_number || `invoice ${row.id}`}`, String(row.paid_amount || 0));
+    if (value === null) return;
+    const paid_amount = Number(value);
+    if (Number.isNaN(paid_amount) || paid_amount < 0 || paid_amount > currentTotal) {
+      toast.error("Invalid paid amount");
+      return;
+    }
+    await billingApi.updatePayment(row.id, { paid_amount, payment_mode: row.payment_mode || "cash" });
+    toast.success("Payment updated");
+    await load();
+  }
+
+  async function cancelBill(row) {
+    const reason = window.prompt(`Reason to cancel ${row.invoice_number || `invoice ${row.id}`}`);
+    if (!reason) return;
+    await billingApi.cancel(row.id, reason);
+    toast.success("Invoice cancelled");
+    await load();
+  }
+
+  async function archiveBill(row) {
+    const reason = window.prompt(`Reason to archive ${row.invoice_number || `invoice ${row.id}`}`);
+    if (!reason) return;
+    await billingApi.archive(row.id, reason);
+    toast.success("Invoice archived");
     await load();
   }
   function handleProfileImageUpload(e) {
@@ -931,6 +1057,7 @@ function App() {
         role: "receptionist",
         profile_image: "",
         bio: "",
+        permissions: [],
       });
       await load();
       toast.success("User added successfully");
@@ -939,24 +1066,40 @@ function App() {
     }
   }
 
-  async function toggleUserStatus(row) {
-    await authApi.updateUserStatus(row.id, row.status === "active" ? "inactive" : "active");
+  async function updateUserPermissions(row, nextPermissions) {
+    try {
+      const { data } = await authApi.updateUser(row.id, { permissions: nextPermissions });
+      setUsersList((rows) => rows.map((u) => (u.id === row.id ? data.user : u)));
+      toast.success("User permissions updated");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Permission update failed");
+    }
+  }
 
-    await load();
+  async function toggleUserStatus(row) {
+    if (row.email === user?.email) return toast.error("You cannot deactivate your own account");
+    try {
+      await authApi.updateUserStatus(row.id, row.status === "active" ? "inactive" : "active");
+      await load();
+      toast.success("User status updated");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "User status update failed");
+    }
   }
   async function deleteUser(row) {
     if (row.email === user?.email) {
-      return toast.error("You cannot delete your own admin account");
+      return toast.error("You cannot deactivate your own admin account");
     }
 
-    if (!confirm("Delete this user?")) return;
+    const reason = window.prompt(`Reason to deactivate ${row.full_name || row.email}`);
+    if (!reason) return;
 
     try {
-      await authApi.deleteUser(row.id);
+      await authApi.deactivateUser(row.id, reason);
       await load();
-      toast.success("User deleted successfully");
+      toast.success("User deactivated successfully");
     } catch (err) {
-      toast.error(err.response?.data?.message || "User delete failed");
+      toast.error(err.response?.data?.message || "User deactivate failed");
     }
   }
   async function saveTenant(e) {
@@ -1083,6 +1226,7 @@ function App() {
   const allTabs = [
     ["dashboard", "Dashboard", Activity],
     ["commandCenter", "Command Center", BarChart3],
+    ["reports", "Reports", LineChart],
     ["patients", "Patients", Users],
     ["doctors", "Doctors", Stethoscope],
     ["appointments", "Appointments", Calendar],
@@ -1090,6 +1234,11 @@ function App() {
     ["doctorPortal", "Doctor Portal", Stethoscope],
     ["emr", "EMR / EHR", FileHeart],
     ["beds", "Beds", Bed],
+    ["ipd", "IPD", Bed],
+    ["nursing", "Nursing", ClipboardCheck],
+    ["emergency", "Emergency", ShieldPlus],
+    ["bloodBank", "Blood Bank", Droplets],
+    ["hrStaff", "HR / Staff", BriefcaseBusiness],
     ["labs", "Lab/Radiology", TestTube2],
     ["pharmacy", "Pharmacy", Pill],
     ["inventory", "Inventory", PackageSearch],
@@ -1148,12 +1297,14 @@ function App() {
     appointmentStatusUpdate: can("appointment.status.update"),
     doctorScheduleManage: can("appointment.edit"),
     bedCreate: can("bed.create"),
+    ipdCreate: can("ipd.create"),
     labCreate: can("lab.create"),
     radiologyCreate: can("radiology.create"),
     pharmacyCreate: can("pharmacy.create"),
     pharmacyStockManage: can("pharmacy.stock.manage"),
     inventoryManage: can("inventory.manage") || can("pharmacy.stock.manage"),
     billingCreate: can("billing.create"),
+    billingEdit: can("billing.edit"),
     adminUsersManage: can("admin.users.manage"),
     hospitalManage: can("hospital.manage"),
     auditView: can("audit.view"),
@@ -1284,6 +1435,7 @@ function App() {
           }
         }}
       >
+        <Suspense fallback={<div className="page-loader">Loading module...</div>}>
             {tab === "fhir" && <FHIRAPIs currentHospital={currentHospital} />}
             {tab === "whatsapp_sms" && <WhatsAppSMS currentHospital={currentHospital} />}
             {tab === "hl7" && <HL7Ready currentHospital={currentHospital} />}
@@ -1302,6 +1454,9 @@ function App() {
                 beds={beds}
                 bills={bills}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
             {tab === "patients" && (
@@ -1328,6 +1483,7 @@ function App() {
                 paginatedPatients={paginatedPatients}
                 editPatient={editPatient}
                 deletePatient={deletePatient}
+                deletePatientDocument={deletePatientDocument}
                 patients={patients}
                 setSelectedPatient={setSelectedPatient}
                 setTab={setTab}
@@ -1367,6 +1523,7 @@ function App() {
                 paginatedPatients={paginatedPatients}
                 editPatient={editPatient}
                 deletePatient={deletePatient}
+                deletePatientDocument={deletePatientDocument}
                 patients={patients}
                 setSelectedPatient={setSelectedPatient}
                 setTab={setTab}
@@ -1473,6 +1630,7 @@ function App() {
                 setAppointmentPage={setAppointmentPage}
                 appointmentTotalPages={appointmentTotalPages}
                 doctors={doctors}
+                patients={patients}
                 doctorSchedules={doctorSchedules}
                 scheduleForm={scheduleForm}
                 setScheduleForm={setScheduleForm}
@@ -1480,11 +1638,18 @@ function App() {
                 editDoctorSchedule={editDoctorSchedule}
                 deleteDoctorSchedule={deleteDoctorSchedule}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
 
             {tab === "beds" && (
               <Beds bed={bed} setBed={setBed} addBed={addBed} beds={beds} permissions={permissions} />
+            )}
+
+            {tab === "ipd" && (
+              <IPD admissions={ipdAdmissions} setAdmissions={setIpdAdmissions} patients={patients} doctors={doctors} beds={beds} onChanged={load} permissions={permissions} />
             )}
 
             {tab === "labs" && (
@@ -1505,11 +1670,16 @@ function App() {
                 doctors={doctors}
                 updateLabStatus={updateLabStatus}
                 uploadLabReport={uploadLabReport}
+                archiveLabOrder={archiveLabOrder}
                 updateRadiologyStatus={updateRadiologyStatus}
                 uploadRadiologyReport={uploadRadiologyReport}
+                archiveRadiologyOrder={archiveRadiologyOrder}
                 saveRadiologyReport={saveRadiologyReport}
                 approveRadiologyReport={approveRadiologyReport}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
 
@@ -1540,6 +1710,26 @@ function App() {
               <CommandCenter />
             )}
 
+            {tab === "reports" && (
+              <Reports />
+            )}
+
+            {tab === "nursing" && (
+              <Nursing />
+            )}
+
+            {tab === "emergency" && (
+              <Emergency />
+            )}
+
+            {tab === "bloodBank" && (
+              <BloodBank />
+            )}
+
+            {tab === "hrStaff" && (
+              <HRStaff />
+            )}
+
             {tab === "operations" && (
               <ProductionOps permissions={permissions} />
             )}
@@ -1550,6 +1740,9 @@ function App() {
                 patients={patients}
                 bills={bills}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
             {tab === "billing" && (
@@ -1557,9 +1750,16 @@ function App() {
                 bill={bill}
                 setBill={setBill}
                 addBill={addBill}
+                editBill={editBill}
+                updateBillPayment={updateBillPayment}
+                cancelBill={cancelBill}
+                archiveBill={archiveBill}
                 bills={bills}
                 patients={patients}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
             {tab === "saasControl" && (
@@ -1590,6 +1790,9 @@ function App() {
                 user={user}
                 enabledModules={enabledModules}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
             {tab === "auditSecurity" && (
@@ -1625,8 +1828,12 @@ function App() {
                 toggleUserStatus={toggleUserStatus}
                 deleteUser={deleteUser}
                 permissions={permissions}
+                permissionCatalog={permissionCatalog}
+                manageableRoles={manageableRoles}
+                updateUserPermissions={updateUserPermissions}
               />
             )}
+        </Suspense>
       </AppLayout>
     </>
   );

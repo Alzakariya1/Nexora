@@ -4,20 +4,21 @@ const { Hospital, User, AuditLog } = require('../models');
 const multer = require('multer');
 const { cloudinary, hasCloudinaryConfig } = require('../config/cloudinary');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission } = require('../middleware/auth');
+const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
 const { DEFAULT_HOSPITAL_ID } = require('../middleware/tenant');
 const { getPlan, getAllowedModules, getAllowedFeatures, normalizePlanModules, normalizePlanFeatureFlags, mergePlanLimits, ensureWithinLimit } = require('../utils/subscription');
 
 const router = express.Router();
 
-const DEFAULT_MODULES = ['dashboard', 'patients', 'doctors', 'appointments', 'beds', 'lab', 'radiology', 'pharmacy', 'billing', 'profile', 'auditSecurity', 'configuration', 'tenants'];
+const DEFAULT_MODULES = ['dashboard', 'patients', 'doctors', 'appointments', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'billing', 'profile', 'auditSecurity', 'configuration', 'tenants'];
 const ALLOWED_MODULES = new Set(DEFAULT_MODULES);
 const FEATURE_FLAGS = ['fhir', 'hl7', 'pacs', 'biometric', 'insurance_tpa', 'erp', 'whatsapp_sms', 'abdm_abha', 'two_factor_auth', 'audit_compliance'];
 const DEFAULT_FEATURE_FLAGS = FEATURE_FLAGS.reduce((acc, key) => { acc[key] = key === 'audit_compliance'; return acc; }, {});
 
 const VALID_TENANT_TYPES = ['hospital', 'clinic', 'diagnostic_center', 'nursing_home'];
 const VALID_PLANS = ['clinic', 'hospital', 'enterprise'];
-const VALID_STATUSES = ['active', 'inactive', 'archived'];
+const VALID_STATUSES = ['active', 'trial', 'suspended', 'inactive', 'archived'];
+const VALID_SUBSCRIPTION_STATUSES = ['trial', 'active', 'past_due', 'suspended', 'cancelled'];
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
 const PASSWORD_MIN_LENGTH = Number(process.env.PASSWORD_MIN_LENGTH || 8);
 const upload = multer({
@@ -66,6 +67,7 @@ function validateTenantPayload(payload) {
   if (payload.type && !VALID_TENANT_TYPES.includes(payload.type)) return 'Invalid hospital type';
   if (payload.plan && !VALID_PLANS.includes(payload.plan)) return 'Invalid hospital plan';
   if (payload.status && !VALID_STATUSES.includes(payload.status)) return 'Invalid hospital status';
+  if (payload.subscription?.status && !VALID_SUBSCRIPTION_STATUSES.includes(payload.subscription.status)) return 'Invalid subscription status';
   return null;
 }
 
@@ -219,11 +221,20 @@ function sanitizeFeatureFlags(featureFlags, plan = 'enterprise') {
   return normalizePlanFeatureFlags(plan, featureFlags);
 }
 
-router.get('/tenant/modules', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
+function buildLifecycleUpdate(action, body = {}) {
+  const now = new Date();
+  if (action === 'activate') return { status: 'active', subscription: { status: 'active', renewed_at: now, notes: body.notes || '' } };
+  if (action === 'trial') return { status: 'trial', subscription: { status: 'trial', trial_start_date: body.trial_start_date || now, trial_end_date: body.trial_end_date || null, notes: body.notes || '' } };
+  if (action === 'suspend') return { status: 'suspended', subscription: { status: 'suspended', suspended_at: now, suspension_reason: body.reason || body.notes || '', notes: body.notes || '' } };
+  if (action === 'cancel') return { status: 'inactive', subscription: { status: 'cancelled', cancelled_at: now, cancellation_reason: body.reason || body.notes || '', notes: body.notes || '' } };
+  return null;
+}
+
+router.get('/tenant/modules', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json(DEFAULT_MODULES);
 });
 
-router.get('/tenant/features', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
+router.get('/tenant/features', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
   res.json({ features: FEATURE_FLAGS, defaults: DEFAULT_FEATURE_FLAGS });
 });
 
@@ -233,12 +244,12 @@ router.get('/tenant/me', verifyToken, asyncHandler(async (req, res) => {
   res.json(publicHospital(hospital));
 }));
 
-router.get('/tenants', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/tenants', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   const hospitals = await Hospital.find().sort({ id: -1 });
   res.json(hospitals.map(publicHospital));
 }));
 
-router.post('/tenants', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/tenants', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const payload = {
     hospital_code: sanitizeHospitalCode(req.body.hospital_code),
     name: String(req.body.name || '').trim(),
@@ -246,7 +257,7 @@ router.post('/tenants', verifyToken, requirePermission('hospital.manage'), async
     status: req.body.status || 'active',
     plan: req.body.plan || 'enterprise',
     plan_limits: mergePlanLimits(req.body.plan || 'enterprise', req.body.plan_limits || {}),
-    subscription: { status: req.body.subscription?.status || 'active', billing_cycle: req.body.subscription?.billing_cycle || 'monthly', renewal_date: req.body.subscription?.renewal_date || null, notes: req.body.subscription?.notes || '' },
+    subscription: { status: req.body.subscription?.status || (req.body.status === 'trial' ? 'trial' : 'active'), billing_cycle: req.body.subscription?.billing_cycle || 'monthly', renewal_date: req.body.subscription?.renewal_date || null, next_billing_date: req.body.subscription?.next_billing_date || null, trial_start_date: req.body.subscription?.trial_start_date || (req.body.status === 'trial' ? new Date() : null), trial_end_date: req.body.subscription?.trial_end_date || null, notes: req.body.subscription?.notes || '' },
     enabled_modules: sanitizeModules(req.body.enabled_modules, req.body.plan || 'enterprise'),
     feature_flags: sanitizeFeatureFlags(req.body.feature_flags, req.body.plan || 'enterprise'),
     branding: req.body.branding || {},
@@ -302,7 +313,7 @@ router.post('/tenants', verifyToken, requirePermission('hospital.manage'), async
   });
 }));
 
-router.patch('/tenants/:id', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/tenants/:id', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const existingHospital = await findHospitalByIdentifier(req.params.id);
   if (!existingHospital) return res.status(404).json({ message: 'Hospital not found' });
   const nextPlan = req.body.plan || existingHospital.plan || 'enterprise';
@@ -347,7 +358,24 @@ router.patch('/tenants/:id', verifyToken, requirePermission('hospital.manage'), 
   res.json(publicHospital(hospital));
 }));
 
-router.get('/tenants/:id/admins', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+
+router.post('/tenants/:id/lifecycle/:action', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const hospital = await findHospitalByIdentifier(req.params.id);
+  if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+  const action = String(req.params.action || '').toLowerCase();
+  const lifecycle = buildLifecycleUpdate(action, req.body || {});
+  if (!lifecycle) return res.status(400).json({ message: 'Invalid lifecycle action. Use activate, trial, suspend or cancel.' });
+  if (Number(hospital.id) === DEFAULT_HOSPITAL_ID && ['suspend', 'cancel'].includes(action)) {
+    return res.status(400).json({ message: 'Default hospital cannot be suspended or cancelled' });
+  }
+  hospital.status = lifecycle.status;
+  hospital.subscription = { ...(hospital.subscription || {}), ...(lifecycle.subscription || {}), updated_at: new Date(), updated_by: req.user.id };
+  await hospital.save();
+  await auditTenantAction(req, `Tenant lifecycle ${action} for hospital ${hospital.name}`);
+  res.json({ message: `Tenant ${action} applied successfully`, hospital: publicHospital(hospital) });
+}));
+
+router.get('/tenants/:id/admins', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -355,7 +383,7 @@ router.get('/tenants/:id/admins', verifyToken, requirePermission('hospital.manag
   res.json(admins.map(publicUser));
 }));
 
-router.post('/tenants/:id/admins', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/tenants/:id/admins', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -376,7 +404,7 @@ router.post('/tenants/:id/admins', verifyToken, requirePermission('hospital.mana
   res.status(201).json({ message: 'Hospital admin created successfully', admin_user: publicUser(adminUser) });
 }));
 
-router.post('/tenants/:id/logo', verifyToken, requirePermission('hospital.manage'), upload.single('logo'), asyncHandler(async (req, res) => {
+router.post('/tenants/:id/logo', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), upload.single('logo'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);
@@ -422,7 +450,105 @@ router.post('/tenants/:id/logo', verifyToken, requirePermission('hospital.manage
   res.json({ message: logoStorage === 'cloudinary' ? 'Hospital logo uploaded successfully' : 'Hospital logo saved successfully. Cloudinary is not configured, so the file was stored in MongoDB.', hospital: publicHospital(hospital) });
 }));
 
-router.delete('/tenants/:id', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+
+function normalizeOnboarding(body = {}, existing = {}) {
+  const allowedSteps = ['hospital_profile', 'subscription_plan', 'modules', 'branding', 'branches', 'admin_user', 'settings', 'review'];
+  const completedSteps = Array.isArray(body.completed_steps)
+    ? body.completed_steps.filter((step) => allowedSteps.includes(step))
+    : (Array.isArray(existing.completed_steps) ? existing.completed_steps : []);
+  const currentStep = allowedSteps.includes(body.current_step) ? body.current_step : (existing.current_step || 'hospital_profile');
+  return {
+    status: body.status || existing.status || 'in_progress',
+    current_step: currentStep,
+    completed_steps: [...new Set(completedSteps)],
+    module_setup_done: Boolean(body.module_setup_done ?? existing.module_setup_done ?? completedSteps.includes('modules')),
+    branding_done: Boolean(body.branding_done ?? existing.branding_done ?? completedSteps.includes('branding')),
+    branch_setup_done: Boolean(body.branch_setup_done ?? existing.branch_setup_done ?? completedSteps.includes('branches')),
+    admin_setup_done: Boolean(body.admin_setup_done ?? existing.admin_setup_done ?? completedSteps.includes('admin_user')),
+    settings_done: Boolean(body.settings_done ?? existing.settings_done ?? completedSteps.includes('settings')),
+    notes: body.notes ?? existing.notes ?? '',
+    updated_at: new Date(),
+  };
+}
+
+function sanitizeBranches(branches = []) {
+  if (!Array.isArray(branches)) return [];
+  return branches
+    .map((branch, index) => ({
+      id: branch.id || index + 1,
+      name: String(branch.name || '').trim(),
+      type: branch.type || 'branch',
+      address: branch.address || '',
+      city: branch.city || '',
+      state: branch.state || '',
+      phone: branch.phone || '',
+      email: normalizeEmail(branch.email || ''),
+      status: branch.status || 'active',
+    }))
+    .filter((branch) => branch.name);
+}
+
+router.post('/tenants/onboarding/draft', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const draftPayload = {
+    hospital_code: sanitizeHospitalCode(req.body.hospital_code),
+    name: String(req.body.name || '').trim(),
+    type: req.body.type || 'hospital',
+    status: 'trial',
+    plan: req.body.plan || 'hospital',
+    plan_limits: mergePlanLimits(req.body.plan || 'hospital', req.body.plan_limits || {}),
+    subscription: { status: 'trial', billing_cycle: req.body.subscription?.billing_cycle || 'monthly', trial_start_date: new Date(), trial_end_date: req.body.subscription?.trial_end_date || null, notes: req.body.subscription?.notes || 'Onboarding draft' },
+    enabled_modules: sanitizeModules(req.body.enabled_modules, req.body.plan || 'hospital'),
+    feature_flags: sanitizeFeatureFlags(req.body.feature_flags, req.body.plan || 'hospital'),
+    branding: req.body.branding || {},
+    settings: req.body.settings || {},
+    branches: sanitizeBranches(req.body.branches || []),
+    onboarding: normalizeOnboarding({ ...(req.body.onboarding || {}), status: 'in_progress' }),
+  };
+  const payloadError = validateTenantPayload(draftPayload);
+  if (payloadError) return res.status(400).json({ message: payloadError });
+  if (draftPayload.hospital_code && await findConflictingHospitalCode(draftPayload.hospital_code)) {
+    return res.status(409).json({ message: `Hospital code ${draftPayload.hospital_code} already exists. Choose a different hospital code.` });
+  }
+  const hospital = await Hospital.create(draftPayload);
+  await auditTenantAction(req, `Created onboarding draft for hospital ${hospital.name}`);
+  res.status(201).json({ message: 'Hospital onboarding draft created', hospital: publicHospital(hospital) });
+}));
+
+router.patch('/tenants/:id/onboarding', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const hospital = await findHospitalByIdentifier(req.params.id);
+  if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+  const nextPlan = req.body.plan || hospital.plan || 'hospital';
+  if (req.body.plan) hospital.plan = nextPlan;
+  if (req.body.enabled_modules) hospital.enabled_modules = sanitizeModules(req.body.enabled_modules, nextPlan);
+  if (req.body.feature_flags) hospital.feature_flags = sanitizeFeatureFlags(req.body.feature_flags, nextPlan);
+  if (req.body.branding) hospital.branding = { ...(hospital.branding || {}), ...(req.body.branding || {}) };
+  if (req.body.settings) hospital.settings = { ...(hospital.settings || {}), ...(req.body.settings || {}) };
+  if (req.body.branches) hospital.branches = sanitizeBranches(req.body.branches);
+  if (req.body.subscription) hospital.subscription = { ...(hospital.subscription || {}), ...(req.body.subscription || {}), updated_at: new Date() };
+  hospital.onboarding = normalizeOnboarding(req.body.onboarding || req.body, hospital.onboarding || {});
+  await hospital.save();
+  await auditTenantAction(req, `Updated onboarding workflow for hospital ${hospital.name}`);
+  res.json({ message: 'Hospital onboarding updated', hospital: publicHospital(hospital) });
+}));
+
+router.post('/tenants/:id/onboarding/complete', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+  const hospital = await findHospitalByIdentifier(req.params.id);
+  if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
+  const adminCount = await User.countDocuments({ hospital_id: Number(hospital.id), role: { $in: ['hospital_admin', 'admin'] }, status: { $ne: 'deleted' } });
+  const missing = [];
+  if (!hospital.name) missing.push('hospital profile');
+  if (!Array.isArray(hospital.enabled_modules) || !hospital.enabled_modules.length) missing.push('enabled modules');
+  if (!hospital.settings?.phone && !hospital.settings?.email) missing.push('contact settings');
+  if (!adminCount) missing.push('hospital admin user');
+  if (missing.length) return res.status(400).json({ message: 'Onboarding cannot be completed yet', missing });
+  hospital.onboarding = { ...(hospital.onboarding || {}), status: 'completed', current_step: 'completed', completed_at: new Date(), completed_by: req.user.id, notes: req.body.notes || hospital.onboarding?.notes || '' };
+  if (hospital.status === 'inactive') hospital.status = 'trial';
+  await hospital.save();
+  await auditTenantAction(req, `Completed onboarding for hospital ${hospital.name}`);
+  res.json({ message: 'Hospital onboarding completed', hospital: publicHospital(hospital) });
+}));
+
+router.delete('/tenants/:id', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const hospital = await findHospitalByIdentifier(req.params.id);
   if (!hospital) return res.status(404).json({ message: 'Hospital not found' });
   const hospitalId = Number(hospital.id);

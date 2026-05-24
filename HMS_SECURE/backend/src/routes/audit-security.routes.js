@@ -21,7 +21,16 @@ function buildAuditQuery(req) {
   const query = tenantFilter(req);
   if (req.query.module) query.module_name = req.query.module;
   if (req.query.status) query.status = req.query.status;
+  if (req.query.severity) query.severity = req.query.severity;
+  if (req.query.action) query.action = new RegExp(String(req.query.action).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (req.query.entity_type) query.entity_type = req.query.entity_type;
+  if (req.query.entity_id) query.entity_id = String(req.query.entity_id);
   if (req.query.user_id) query.user_id = Number(req.query.user_id);
+  if (req.query.from || req.query.to) {
+    query.created_at = {};
+    if (req.query.from) query.created_at.$gte = new Date(req.query.from);
+    if (req.query.to) query.created_at.$lte = new Date(req.query.to);
+  }
   if (req.query.q) {
     const rx = new RegExp(String(req.query.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     query.$or = [{ action: rx }, { module_name: rx }, { entity_type: rx }, { path: rx }];
@@ -39,7 +48,8 @@ router.get('/audit-logs', requirePermission('audit.view'), asyncHandler(async (r
 
 router.get('/audit-logs/export', requirePermission('audit.view'), asyncHandler(async (req, res) => {
   const rows = await AuditLog.find(buildAuditQuery(req)).sort({ id: -1 }).limit(5000).lean();
-  const headers = ['id', 'created_at', 'user_id', 'user_role', 'action', 'module_name', 'entity_type', 'entity_id', 'status', 'severity', 'ip_address', 'method', 'path'];
+  await auditEvent({ req, action: 'audit.exported', module_name: 'audit', entity_type: 'AuditLog', status: 'success', severity: 'warning', new_value: { filters: req.query, rows: rows.length } });
+  const headers = ['id', 'created_at', 'user_id', 'user_role', 'action', 'module_name', 'entity_type', 'entity_id', 'status', 'severity', 'reason', 'changed_fields', 'ip_address', 'method', 'path'];
   const csv = [headers.join(',')].concat(rows.map(row => headers.map(h => csvEscape(row[h])).join(','))).join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename=audit-logs-${Date.now()}.csv`);
@@ -54,6 +64,11 @@ router.get('/security/login-history', requirePermission('security.manage'), asyn
   res.json(rows);
 }));
 
+router.get('/audit-logs/entity/:entityType/:entityId', requirePermission('audit.view'), asyncHandler(async (req, res) => {
+  const rows = await AuditLog.find(tenantFilter(req, { entity_type: req.params.entityType, entity_id: String(req.params.entityId) })).sort({ created_at: -1 }).limit(500).lean();
+  res.json(rows);
+}));
+
 router.get('/security/summary', requirePermission('security.manage'), asyncHandler(async (req, res) => {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [auditCount, failedLogins, deniedActions, activeUsers, settingsCount] = await Promise.all([
@@ -63,7 +78,9 @@ router.get('/security/summary', requirePermission('security.manage'), asyncHandl
     User.countDocuments(req.user.role === 'super_admin' ? {} : { hospital_id: Number(req.user.hospital_id || DEFAULT_HOSPITAL_ID), status: 'active' }),
     SecuritySetting.countDocuments(tenantFilter(req)),
   ]);
-  res.json({ auditCount, failedLogins24h: failedLogins, deniedActions24h: deniedActions, activeUsers, settingsCount });
+  const patientViews24h = await AuditLog.countDocuments(tenantFilter(req, { action: 'patient.viewed', created_at: { $gte: since } }));
+  const exports24h = await AuditLog.countDocuments(tenantFilter(req, { action: /exported$/i, created_at: { $gte: since } }));
+  res.json({ auditCount, failedLogins24h: failedLogins, deniedActions24h: deniedActions, patientViews24h, exports24h, activeUsers, settingsCount });
 }));
 
 router.post('/audit-logs', asyncHandler(async (req, res) => {

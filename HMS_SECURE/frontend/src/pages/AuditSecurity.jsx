@@ -18,7 +18,7 @@ export default function AuditSecurity({ permissions }) {
   const [auditRows, setAuditRows] = useState([]);
   const [loginRows, setLoginRows] = useState([]);
   const [settings, setSettings] = useState([]);
-  const [filters, setFilters] = useState({ q: '', module: '', status: '' });
+  const [filters, setFilters] = useState({ q: '', module: '', status: '', severity: '', entity_type: '', entity_id: '', from: '', to: '' });
   const [settingForm, setSettingForm] = useState(emptySetting);
   const [loading, setLoading] = useState(false);
 
@@ -89,6 +89,8 @@ export default function AuditSecurity({ permissions }) {
         <div className="statCard"><span>Total Audit Logs</span><strong>{summary.auditCount || 0}</strong><small>All tracked sensitive events</small></div>
         <div className="statCard"><span>Failed Logins 24h</span><strong>{summary.failedLogins24h || 0}</strong><small>Invalid or blocked login attempts</small></div>
         <div className="statCard"><span>Denied Actions 24h</span><strong>{summary.deniedActions24h || 0}</strong><small>Permission blocked activities</small></div>
+        <div className="statCard"><span>Patient Views 24h</span><strong>{summary.patientViews24h || 0}</strong><small>Patient record access logs</small></div>
+        <div className="statCard"><span>Exports 24h</span><strong>{summary.exports24h || 0}</strong><small>Audit/data export activity</small></div>
         <div className="statCard"><span>Active Users</span><strong>{summary.activeUsers || 0}</strong><small>Current hospital users</small></div>
       </div>
 
@@ -111,6 +113,16 @@ export default function AuditSecurity({ permissions }) {
               <option value="denied">Denied</option>
               <option value="deleted">Deleted</option>
             </select>
+            <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })}>
+              <option value="">All severity</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+            <input placeholder="Entity type" value={filters.entity_type} onChange={(e) => setFilters({ ...filters, entity_type: e.target.value })} />
+            <input placeholder="Entity ID" value={filters.entity_id} onChange={(e) => setFilters({ ...filters, entity_id: e.target.value })} />
+            <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+            <input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
             <button type="submit">Apply</button>
           </form>
           <div className="auditList">
@@ -120,8 +132,10 @@ export default function AuditSecurity({ permissions }) {
                   <strong>{row.action}</strong>
                   <p>{row.user_name || 'System'} · {row.module_name || '-'} · {fmtDate(row.created_at)}</p>
                   <small>{row.method || ''} {row.path || ''}</small>
+                  {!!row.changed_fields?.length && <small>Changed: {row.changed_fields.join(', ')}</small>}
+                  {row.reason && <small>Reason: {row.reason}</small>}
                 </div>
-                <div className="auditMeta"><StatusBadge value={row.status} /><small>{row.ip_address || '-'}</small></div>
+                <div className="auditMeta"><StatusBadge value={row.status} /><small>{row.severity || 'info'}</small><small>{row.ip_address || '-'}</small></div>
               </article>
             ))}
             {!auditRows.length && <p className="muted emptyState">No audit logs found.</p>}

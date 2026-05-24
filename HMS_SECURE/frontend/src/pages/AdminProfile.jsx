@@ -14,6 +14,40 @@ function roleLabel(role = "user") {
   return String(role).replace(/_/g, " ");
 }
 
+function PermissionChecklist({ value = [], onChange, catalog = [], disabled = false }) {
+  const selected = Array.isArray(value) ? value : [];
+  const toggle = (permission) => {
+    if (disabled) return;
+    const next = selected.includes(permission)
+      ? selected.filter((p) => p !== permission)
+      : [...selected, permission];
+    onChange?.(next);
+  };
+  if (!catalog.length) return <p className="muted">No grantable custom permissions available for your role.</p>;
+  return (
+    <div className="permission-builder">
+      {catalog.map((group) => (
+        <div className="permission-group" key={group.group}>
+          <h4>{roleLabel(group.group)}</h4>
+          <div className="permission-grid">
+            {group.permissions.map((item) => (
+              <label key={item.permission} className="permission-check">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(item.permission)}
+                  disabled={disabled}
+                  onChange={() => toggle(item.permission)}
+                />
+                <span>{item.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminProfile({
   user,
   profile,
@@ -34,6 +68,9 @@ export default function AdminProfile({
   toggleUserStatus,
   deleteUser,
   permissions = {},
+  permissionCatalog = [],
+  manageableRoles = [],
+  updateUserPermissions,
 }) {
   const canManageUsers = Boolean(permissions.adminUsersManage);
   const completionScore = [profile.full_name, profile.email, profile.bio, profile.profile_image].filter(Boolean).length;
@@ -155,14 +192,33 @@ export default function AdminProfile({
               <div className="keka-section-card">
                 <h2>Add New User / Role</h2>
                 <p>Create controlled access for hospital team members.</p>
-                <Form title="" data={newUser} setData={setNewUser} submit={addUser} />
+                <form className="form" onSubmit={addUser}>
+                  <div className="formGrid">
+                    <input placeholder="Full name" value={newUser.full_name || ""} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })} />
+                    <input placeholder="Email" value={newUser.email || ""} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
+                    <input type="password" placeholder="Temporary password" value={newUser.password || ""} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} />
+                    <select value={newUser.role || "receptionist"} onChange={(e) => setNewUser({ ...newUser, role: e.target.value, permissions: [] })}>
+                      {(manageableRoles.length ? manageableRoles : ["receptionist", "doctor", "nurse", "pharmacist", "lab_technician", "accountant", "patient"]).map((role) => (
+                        <option key={role} value={role}>{roleLabel(role)}</option>
+                      ))}
+                    </select>
+                    <input placeholder="Phone" value={newUser.phone || ""} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} />
+                    <textarea placeholder="Bio" value={newUser.bio || ""} onChange={(e) => setNewUser({ ...newUser, bio: e.target.value })} />
+                  </div>
+                  <div className="keka-bio-box permission-note">
+                    <span>Custom permission override</span>
+                    <p>Role base permissions apply automatically. Select only extra permissions this user specifically needs.</p>
+                  </div>
+                  <PermissionChecklist catalog={permissionCatalog} value={newUser.permissions || []} onChange={(next) => setNewUser({ ...newUser, permissions: next })} />
+                  <button>Create User</button>
+                </form>
               </div>
 
               <div className="keka-section-card">
                 <div className="keka-card-title-row">
                   <div>
                     <h2>User List</h2>
-                    <p>Manage active users and access status.</p>
+                    <p>Manage active users, roles and access status without permanently deleting records.</p>
                   </div>
                 </div>
                 <div className="keka-filter-row">
@@ -174,29 +230,49 @@ export default function AdminProfile({
                     <option value="hospital_admin">Hospital Admin</option>
                     <option value="doctor">Doctor</option>
                     <option value="receptionist">Receptionist</option>
+                    <option value="nurse">Nurse</option>
                     <option value="pharmacist">Pharmacist</option>
                     <option value="lab_technician">Lab Technician</option>
                     <option value="accountant">Accountant</option>
+                    <option value="patient">Patient</option>
                   </select>
                 </div>
                 <div className="tableWrap">
                   <table>
                     <thead>
-                      <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+                      <tr><th>Name</th><th>Email</th><th>Role</th><th>Custom Permissions</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                       {filteredUsers.map((u) => (
-                        <tr key={u.id}>
+                        <React.Fragment key={u.id}>
+                        <tr>
                           <td>{u.full_name}</td>
                           <td>{u.email}</td>
                           <td>{roleLabel(u.role)}</td>
+                          <td>{Array.isArray(u.permissions) ? u.permissions.length : 0}</td>
                           <td>{permissions.adminUsersManage ? <button onClick={() => toggleUserStatus(u)}>{u.status}</button> : u.status}</td>
                           <td>
                             {u.email !== user?.email ? (
-                              permissions.adminUsersManage ? <button onClick={() => deleteUser(u)}>Delete</button> : <span className="muted">No access</span>
+                              permissions.adminUsersManage ? <button onClick={() => deleteUser(u)}>Deactivate</button> : <span className="muted">No access</span>
                             ) : <button disabled>Current User</button>}
                           </td>
                         </tr>
+                        {permissions.adminUsersManage && u.email !== user?.email && (
+                          <tr className="permission-row">
+                            <td colSpan="6">
+                              <div className="keka-bio-box permission-note">
+                                <span>Permission Builder for {u.full_name}</span>
+                                <p>Base role: {roleLabel(u.role)}. These checkboxes save custom extra permissions only.</p>
+                              </div>
+                              <PermissionChecklist
+                                catalog={permissionCatalog}
+                                value={u.permissions || []}
+                                onChange={(next) => updateUserPermissions?.(u, next)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

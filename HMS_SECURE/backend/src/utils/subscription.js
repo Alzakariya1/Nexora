@@ -157,9 +157,26 @@ async function getHospitalSubscription(hospitalId = DEFAULT_HOSPITAL_ID) {
     storage_gb: 0,
   };
   const checks = Object.keys(limits).reduce((acc, key) => {
-    acc[key] = { used: Number(usage[key] || 0), limit: Number(limits[key] || 0), exceeded: Number(limits[key] || 0) > 0 && Number(usage[key] || 0) >= Number(limits[key] || 0) };
+    const used = Number(usage[key] || 0);
+    const limit = Number(limits[key] || 0);
+    const percent = limit > 0 ? Math.round((used / limit) * 100) : 0;
+    acc[key] = {
+      used,
+      limit,
+      remaining: Math.max(limit - used, 0),
+      percent,
+      warning: limit > 0 && percent >= 80 && used < limit,
+      exceeded: limit > 0 && used >= limit,
+    };
     return acc;
   }, {});
+  const blockedStatuses = ['suspended', 'cancelled'];
+  const subscriptionStatus = hospital?.subscription?.status || 'active';
+  const guardrails = {
+    can_create: !blockedStatuses.includes(subscriptionStatus),
+    blocked_reason: blockedStatuses.includes(subscriptionStatus) ? `Subscription is ${subscriptionStatus}` : null,
+    warnings: Object.entries(checks).filter(([, value]) => value.warning || value.exceeded).map(([key, value]) => ({ key, ...value })),
+  };
   return {
     hospital_id: Number(hospitalId),
     hospital_name: hospital?.name || 'Default Hospital',
@@ -167,11 +184,14 @@ async function getHospitalSubscription(hospitalId = DEFAULT_HOSPITAL_ID) {
     plan_name: plan.name,
     description: plan.description,
     monthly_price_inr: plan.monthly_price_inr,
-    status: hospital?.subscription?.status || 'active',
+    status: subscriptionStatus,
+    billing_cycle: hospital?.subscription?.billing_cycle || 'monthly',
     renewal_date: hospital?.subscription?.renewal_date || null,
+    next_billing_date: hospital?.subscription?.next_billing_date || null,
     limits,
     usage,
     checks,
+    guardrails,
     allowed_modules: getAllowedModules(planId),
     allowed_features: getAllowedFeatures(planId),
   };
@@ -182,6 +202,13 @@ async function ensureWithinLimit(hospitalId, limitKey, increment = 1) {
   const limit = Number(subscription.limits?.[limitKey] || 0);
   if (!limit) return { ok: true, subscription };
   const used = Number(subscription.usage?.[limitKey] || 0);
+  if (subscription.guardrails && subscription.guardrails.can_create === false) {
+    return {
+      ok: false,
+      subscription,
+      message: subscription.guardrails.blocked_reason || 'Subscription is not active for creating new records.',
+    };
+  }
   if (used + Number(increment || 0) > limit) {
     return {
       ok: false,

@@ -6,7 +6,7 @@ export const PLAN_DEFINITIONS = {
     price: '₹2,999/mo',
     description: 'Best for single clinics and small practices.',
     limits: { users: 8, patients: 1500, doctors: 5, appointments_per_month: 1200, medicines: 250, branches: 1, storage_gb: 5 },
-    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'billing', 'profile', 'configuration', 'communications'],
+    modules: ['dashboard', 'reports', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'billing', 'profile', 'configuration', 'communications'],
   },
   hospital: {
     id: 'hospital',
@@ -14,7 +14,7 @@ export const PLAN_DEFINITIONS = {
     price: '₹9,999/mo',
     description: 'For hospitals that need OPD/IPD, lab, radiology, pharmacy and billing.',
     limits: { users: 50, patients: 25000, doctors: 50, appointments_per_month: 15000, medicines: 5000, branches: 3, storage_gb: 100 },
-    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications'],
+    modules: ['dashboard', 'reports', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'bloodBank', 'hrStaff', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications'],
   },
   enterprise: {
     id: 'enterprise',
@@ -22,7 +22,7 @@ export const PLAN_DEFINITIONS = {
     price: '₹24,999/mo',
     description: 'For chains and enterprise hospitals with advanced controls and integrations.',
     limits: { users: 500, patients: 500000, doctors: 500, appointments_per_month: 200000, medicines: 50000, branches: 50, storage_gb: 1000 },
-    modules: ['dashboard', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications', 'integration', 'tenants'],
+    modules: ['dashboard', 'reports', 'patients', 'doctors', 'appointments', 'patientPortal', 'doctorPortal', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'bloodBank', 'hrStaff', 'billing', 'compliance', 'integration', 'profile', 'auditSecurity', 'operations', 'configuration', 'communications', 'integration', 'tenants'],
   },
 };
 
@@ -49,12 +49,14 @@ export const ROLE_PERMISSIONS = {
     'doctor.view', 'doctor.create', 'doctor.edit', 'doctor.delete',
     'appointment.view', 'appointment.create', 'appointment.edit', 'appointment.delete', 'portal.patient.view', 'portal.doctor.view', 'appointment.status.update', 'emr.view', 'emr.create', 'emr.edit', 'emr.delete',
     'bed.view', 'bed.create', 'bed.status.update',
+    'opd.view', 'opd.create', 'ipd.view', 'ipd.create',
     'lab.view', 'lab.create',
+    'clinical.view', 'clinical.manage',
     'radiology.view', 'radiology.create',
     'pharmacy.view', 'pharmacy.create', 'pharmacy.stock.manage', 'inventory.view', 'inventory.manage',
     'billing.view', 'billing.create', 'billing.edit', 'insurance.view', 'insurance.manage',
     'admin.profile.manage', 'admin.users.manage',
-    'audit.view', 'security.manage', 'compliance.view', 'compliance.manage', 'configuration.manage', 'communication.view', 'communication.manage', 'communication.view', 'communication.manage', 'hospital.manage'
+    'audit.view', 'security.manage', 'compliance.view', 'compliance.manage', 'configuration.manage', 'communication.view', 'communication.manage', 'communication.view', 'communication.manage', 'clinical.view', 'clinical.manage', 'hospital.manage'
   ],
   hospital_admin: [
     'dashboard.view', 'analytics.view',
@@ -68,12 +70,13 @@ export const ROLE_PERMISSIONS = {
     'pharmacy.view', 'pharmacy.create', 'pharmacy.stock.manage', 'inventory.view', 'inventory.manage',
     'billing.view', 'billing.create', 'billing.edit', 'insurance.view', 'insurance.manage',
     'admin.profile.manage', 'admin.users.manage',
-    'audit.view', 'security.manage', 'compliance.view', 'compliance.manage', 'configuration.manage', 'communication.view', 'communication.manage'
+    'audit.view', 'security.manage', 'compliance.view', 'compliance.manage', 'configuration.manage', 'communication.view', 'communication.manage', 'clinical.view', 'clinical.manage'
   ],
   doctor: [
     'dashboard.view',
     'patient.view',
     'appointment.view', 'appointment.status.update', 'portal.doctor.view',
+    'clinical.view', 'clinical.manage',
     'lab.view', 'radiology.view', 'portal.doctor.view', 'emr.view', 'emr.create',
     'admin.profile.manage'
   ],
@@ -81,7 +84,9 @@ export const ROLE_PERMISSIONS = {
     'dashboard.view',
     'patient.view', 'patient.edit',
     'bed.view', 'bed.status.update',
+    'ipd.view', 'ipd.create',
     'appointment.view',
+    'clinical.view', 'clinical.manage',
     'admin.profile.manage'
   ],
   receptionist: [
@@ -89,6 +94,7 @@ export const ROLE_PERMISSIONS = {
     'patient.view', 'patient.create', 'patient.edit', 'patient.document.manage',
     'appointment.view', 'appointment.create', 'appointment.edit', 'appointment.delete', 'portal.patient.view', 'portal.doctor.view', 'emr.view', 'emr.create',
     'bed.view',
+    'ipd.view',
     'billing.view', 'billing.create',
     'admin.profile.manage'
   ],
@@ -119,6 +125,7 @@ export const ROLE_PERMISSIONS = {
 export const MODULES = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'commandCenter', label: 'Command Center' },
+  { id: 'reports', label: 'Reports' },
   { id: 'patients', label: 'Patients' },
   { id: 'doctors', label: 'Doctors' },
   { id: 'appointments', label: 'Appointments' },
@@ -130,6 +137,8 @@ export const MODULES = [
   { id: 'radiology', label: 'Radiology' },
   { id: 'pharmacy', label: 'Pharmacy' },
   { id: 'inventory', label: 'Inventory' },
+  { id: 'bloodBank', label: 'Blood Bank' },
+  { id: 'hrStaff', label: 'HR / Staff' },
   { id: 'billing', label: 'Billing' },
   { id: 'profile', label: 'Profile' },
   { id: 'auditSecurity', label: 'Security' },
@@ -192,6 +201,7 @@ export const TAB_PERMISSIONS = {
   audit_compliance: ['audit.view', 'security.manage'],
   dashboard: 'dashboard.view',
   commandCenter: 'analytics.view',
+  reports: 'analytics.view',
   patients: 'patient.view',
   doctors: 'doctor.view',
   appointments: 'appointment.view',
@@ -202,6 +212,8 @@ export const TAB_PERMISSIONS = {
   labs: ['lab.view', 'radiology.view'],
   pharmacy: 'pharmacy.view',
   inventory: ['inventory.view', 'pharmacy.view'],
+  bloodBank: ['clinical.view', 'clinical.manage'],
+  hrStaff: ['admin.users.manage', 'hospital.manage'],
   billing: 'billing.view',
   profile: 'admin.profile.manage',
   auditSecurity: ['audit.view', 'security.manage'],
@@ -238,6 +250,8 @@ export const TAB_MODULES = {
   labs: ['lab', 'radiology'],
   pharmacy: ['pharmacy'],
   inventory: ['inventory', 'pharmacy'],
+  bloodBank: ['bloodBank', 'inventory'],
+  hrStaff: ['hrStaff'],
   billing: ['billing'],
   profile: ['profile'],
   auditSecurity: ['auditSecurity', 'profile'],

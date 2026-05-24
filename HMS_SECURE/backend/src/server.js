@@ -10,11 +10,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 app.set("trust proxy", Number(process.env.TRUST_PROXY || 1));
 app.use(helmet());
-const allowedOrigins = (
-    process.env.FRONTEND_URL
+const allowedOrigins = Array.from(new Set([
+    ...(process.env.FRONTEND_URL
         ? process.env.FRONTEND_URL.split(",")
-        : ["http://localhost:5173", "http://localhost:3000"]
-)
+        : ["http://localhost:5173", "http://localhost:3000"]),
+    ...(process.env.CORS_EXTRA_ORIGINS ? process.env.CORS_EXTRA_ORIGINS.split(",") : []),
+]))
     .map((x) => x.trim())
     .filter(Boolean);
 app.use(
@@ -73,8 +74,18 @@ app.use("/api", require("./routes/emr.routes"));
 app.use("/api", require("./routes/audit-security.routes"));
 app.use("/api", require("./routes/compliance.routes"));
 app.use("/api", require("./routes/integration.routes"));
+app.use("/api", require("./routes/hl7.routes"));
+app.use("/api", require("./routes/pacs-dicom.routes"));
+app.use("/api", require("./routes/abdm-abha.routes"));
+app.use("/api", require("./routes/erp-tally.routes"));
 app.use("/api", require("./routes/enterprise-features.routes"));
 app.use("/api", require("./routes/command-center.routes"));
+app.use("/api", require("./routes/reports.routes"));
+app.use("/api", require("./routes/ot-surgery.routes"));
+app.use("/api", require("./routes/nursing.routes"));
+app.use("/api", require("./routes/emergency.routes"));
+app.use("/api", require("./routes/blood-bank.routes"));
+app.use("/api", require("./routes/hr-staff.routes"));
 app.use("/api", require("./routes/operations.routes"));
 app.use("/api", require("./routes/configuration.routes"));
 app.use("/api", require("./routes/template.routes"));
@@ -82,6 +93,9 @@ app.use("/api", require("./routes/subscription.routes"));
 app.use("/api", require("./routes/saas.routes"));
 app.use("/api", require("./routes/saas-billing.routes"));
 app.use("/api", require("./routes/saas-business.routes"));
+app.use("/api", require("./routes/saas-customer-success.routes"));
+app.use("/api", require("./routes/saas-support.routes"));
+app.use("/api", require("./routes/saas-knowledge-base.routes"));
 app.use("/api", require("./routes/sales.routes"));
 app.use("/api", require("./routes/legal-security.routes"));
 app.use("/api", require("./routes/pilot.routes"));
