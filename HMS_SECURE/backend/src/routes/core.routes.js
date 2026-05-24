@@ -19,6 +19,27 @@ function fileToDataUrl(file) {
     return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
 }
 
+function doctorLookupFilter(req, rawId, extra = {}) {
+    const raw = String(rawId || '').trim();
+    const numericId = Number(raw);
+    const or = [];
+    if (Number.isFinite(numericId)) or.push({ id: numericId });
+    if (raw) or.push({ doctor_id: raw });
+    if (!or.length) return null;
+    return tenantFilter(req, { ...extra, $or: or });
+}
+
+async function findDoctorFromParam(req, rawId, extra = {}) {
+    const filter = doctorLookupFilter(req, rawId, extra);
+    if (!filter) return null;
+    return Doctor.findOne(filter);
+}
+
+function doctorEntityId(doctor, fallback) {
+    const numeric = Number(doctor?.id || fallback);
+    return Number.isFinite(numeric) ? numeric : doctor?.doctor_id || String(fallback || '');
+}
+
 async function uploadBufferToCloudinary(file, options) {
     return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(options, (error, uploadResult) => {
@@ -334,13 +355,14 @@ router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), uplo
 
 
 router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'), upload.single('document'), asyncHandler(async (req, res) => {
-    const doctorNumericId = Number(req.params.id);
-    if (!Number.isFinite(doctorNumericId)) {
-        return res.status(400).json({ message: 'Invalid doctor id' });
+    const doctor = await findDoctorFromParam(req, req.params.id);
+    if (!doctor) {
+        return res.status(404).json({
+            message: 'Doctor not found',
+            hint: 'The document upload URL must use the doctor numeric id or doctor_id from the Doctors table, not the logged-in user/admin id.',
+        });
     }
-
-    const doctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId }));
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorNumericId = doctorEntityId(doctor, req.params.id);
 
     if (!req.file) {
         return res.status(400).json({ message: 'Document file is required' });
@@ -408,15 +430,15 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
 }));
 
 router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.document.manage'), asyncHandler(async (req, res) => {
-    const doctorNumericId = Number(req.params.id);
     const docIndex = Number(req.params.docIndex);
 
-    if (!Number.isFinite(doctorNumericId) || !Number.isInteger(docIndex) || docIndex < 0) {
+    if (!Number.isInteger(docIndex) || docIndex < 0) {
         return res.status(400).json({ message: 'Invalid doctor document request' });
     }
 
-    const doctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId }));
+    const doctor = await findDoctorFromParam(req, req.params.id);
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+    const doctorNumericId = doctorEntityId(doctor, req.params.id);
 
     const doc = doctor.certificates?.[docIndex];
     if (!doc) return res.status(404).json({ message: 'Document not found' });

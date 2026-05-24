@@ -64,6 +64,7 @@ export default function Doctors({
         );
 
     const documents = selectedDoctor.certificates || selectedDoctor.documents || [];
+    const profileDoctorKey = selectedDoctor.id || selectedDoctor.doctor_id || selectedDoctor._id;
 
     return (
       <section className="keka-profile-page doctor-keka-profile">
@@ -286,7 +287,7 @@ export default function Doctors({
                         if (!doctorDocForm.file) return alert("Please choose a document file");
                         try {
                           setUploadingDoctorDocument(true);
-                          await uploadDoctorDocument(selectedDoctor.id, doctorDocForm);
+                          await uploadDoctorDocument(profileDoctorKey, doctorDocForm);
                           resetDoctorDocForm();
                           setShowDoctorDocForm(false);
                         } finally {
@@ -347,7 +348,7 @@ export default function Doctors({
                             onClick={async () => {
                               try {
                                 setDeletingDoctorDocumentIndex(index);
-                                await deleteDoctorDocument(selectedDoctor.id, index);
+                                await deleteDoctorDocument(profileDoctorKey, index);
                               } finally {
                                 setDeletingDoctorDocumentIndex(null);
                               }
