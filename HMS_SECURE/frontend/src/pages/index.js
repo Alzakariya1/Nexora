@@ -56,15 +56,3 @@ export { default as FHIRAPIs } from './FHIRAPIs';
 export { default as WhatsAppSMS } from './WhatsAppSMS';
 
 export { default as EnterpriseFeatureWorkspace } from './EnterpriseFeatureWorkspace';
-
-export { default as IPD } from './IPD';
-
-export { default as Reports } from './Reports';
-
-export { default as Nursing } from './Nursing';
-
-export { default as Emergency } from './Emergency';
-
-export { default as BloodBank } from './BloodBank';
-
-export { default as HRStaff } from './HRStaff';

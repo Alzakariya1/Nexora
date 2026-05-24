@@ -1,20 +1,11 @@
-const { CommunicationLog, CommunicationTemplate } = require('../models');
-const { tenantCreateData, tenantFilter } = require('../middleware/tenant');
+const { CommunicationLog } = require('../models');
+const { tenantCreateData } = require('../middleware/tenant');
 
 const CHANNELS = ['in_app', 'email', 'sms', 'whatsapp'];
-const FINAL_STATUSES = ['sent', 'delivered', 'read', 'skipped', 'cancelled'];
 
 function normalizeChannel(channel) {
-  const clean = String(channel || 'in_app').toLowerCase().trim();
+  const clean = String(channel || 'in_app').toLowerCase();
   return CHANNELS.includes(clean) ? clean : 'in_app';
-}
-
-function normalizeContact(channel, contact) {
-  const value = String(contact || '').trim();
-  if (!value) return '';
-  if (channel === 'email') return value.toLowerCase();
-  if (channel === 'sms' || channel === 'whatsapp') return value.replace(/[^0-9+]/g, '');
-  return value;
 }
 
 function channelEnabled(channel) {
@@ -25,91 +16,29 @@ function channelEnabled(channel) {
   return false;
 }
 
-function providerName(channel) {
-  if (channel === 'in_app') return 'internal';
-  if (channel === 'email') return process.env.EMAIL_PROVIDER || 'smtp';
-  if (channel === 'sms') return process.env.SMS_PROVIDER || 'sms_gateway';
-  if (channel === 'whatsapp') return process.env.WHATSAPP_PROVIDER || 'whatsapp_business';
-  return null;
-}
-
-function renderTemplate(text = '', variables = {}) {
-  return String(text || '').replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (_match, key) => {
-    const value = key.split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : undefined), variables);
-    return value === undefined || value === null ? '' : String(value);
-  });
-}
-
-async function applyTemplate(req, payload = {}) {
-  if (!payload.template_key) return payload;
-  const channel = normalizeChannel(payload.channel);
-  const template = await CommunicationTemplate.findOne(tenantFilter(req, {
-    template_key: payload.template_key,
-    channel,
-    status: 'approved',
-  })).lean();
-  if (!template) return payload;
-  const variables = payload.variables || {};
-  return {
-    ...payload,
-    title: payload.title || renderTemplate(template.title_template, variables),
-    message: payload.message || renderTemplate(template.message_template, variables),
-    template_key: template.template_key,
-    template_version: template.version,
-    provider_template_id: template.provider_template_id,
-  };
-}
-
 async function queueCommunication(req, payload = {}) {
   const channel = normalizeChannel(payload.channel);
-  const resolved = await applyTemplate(req, { ...payload, channel });
   const enabled = channelEnabled(channel);
-  const scheduledFor = resolved.scheduled_for ? new Date(resolved.scheduled_for) : null;
-  const isFuture = scheduledFor && scheduledFor.getTime() > Date.now();
-  const status = enabled ? (channel === 'in_app' && !isFuture ? 'sent' : 'queued') : 'skipped';
-  const retryCount = Number(resolved.retry_count || 0);
+  const status = enabled ? (channel === 'in_app' ? 'sent' : 'queued') : 'skipped';
   const log = await CommunicationLog.create(tenantCreateData(req, {
     channel,
-    recipient_type: resolved.recipient_type || 'patient',
-    recipient_id: resolved.recipient_id || null,
-    recipient_name: resolved.recipient_name || null,
-    recipient_contact: resolved.recipient_contact || null,
-    contact_normalized: normalizeContact(channel, resolved.recipient_contact),
-    title: resolved.title || 'Notification',
-    message: resolved.message || '',
-    template_key: resolved.template_key || null,
-    template_version: resolved.template_version || null,
-    module: resolved.module || 'system',
-    entity_type: resolved.entity_type || null,
-    entity_id: resolved.entity_id || null,
+    recipient_type: payload.recipient_type || 'patient',
+    recipient_id: payload.recipient_id || null,
+    recipient_name: payload.recipient_name || null,
+    recipient_contact: payload.recipient_contact || null,
+    title: payload.title || 'Notification',
+    message: payload.message || '',
+    module: payload.module || 'system',
+    entity_type: payload.entity_type || null,
+    entity_id: payload.entity_id || null,
     status,
-    provider: resolved.provider || providerName(channel),
-    provider_message_id: resolved.provider_message_id || null,
-    provider_payload: resolved.provider_payload || {},
+    provider: payload.provider || (channel === 'in_app' ? 'internal' : null),
     error_message: enabled ? null : `${channel.toUpperCase()} provider is not configured. Message kept as skipped log.`,
-    scheduled_for: scheduledFor,
-    retry_count: retryCount,
-    next_retry_at: resolved.next_retry_at || null,
-    consent_checked: Boolean(resolved.consent_checked || false),
+    scheduled_for: payload.scheduled_for || null,
     sent_at: status === 'sent' ? new Date() : null,
     created_by: req.user?.id || null,
   }));
   return log;
 }
 
-function nextRetryDate(retryCount) {
-  const minutes = Math.min(60, Math.max(5, (Number(retryCount || 0) + 1) * 10));
-  return new Date(Date.now() + minutes * 60 * 1000);
-}
-
-module.exports = {
-  CHANNELS,
-  FINAL_STATUSES,
-  normalizeChannel,
-  normalizeContact,
-  channelEnabled,
-  providerName,
-  renderTemplate,
-  queueCommunication,
-  nextRetryDate,
-};
+module.exports = { CHANNELS, channelEnabled, queueCommunication };

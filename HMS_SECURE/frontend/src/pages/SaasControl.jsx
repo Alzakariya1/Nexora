@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { Building2, Crown, Download, Gauge, IndianRupee, ShieldAlert, Users, PlayCircle, PauseCircle, XCircle, ReceiptText, CreditCard, Link as LinkIcon, CheckCircle2, ServerCog, TrendingUp, Activity, BookOpen, Search } from 'lucide-react';
+import { Building2, Crown, Download, Gauge, IndianRupee, ShieldAlert, Users, PlayCircle, PauseCircle, XCircle, ReceiptText, CreditCard, Link as LinkIcon, CheckCircle2, ServerCog } from 'lucide-react';
 import { saasApi } from '../api';
 
 const money = (value = 0) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
@@ -40,17 +40,11 @@ export default function SaasControl() {
   const [planForm, setPlanForm] = useState({ plan_id: '', name: '', monthly_price_inr: '', trial_days: 14, support_level: 'standard', modules: 'dashboard,patients,doctors,appointments,billing', limits: '{\"users\":10,\"patients\":2000,\"doctors\":5}' });
   const [onboardingForm, setOnboardingForm] = useState({ name: '', hospital_code: '', type: 'hospital', plan: 'clinic', trial_days: 14, create_tenant_db: true, admin_full_name: '', admin_email: '', admin_password: '' });
   const [tenantDb, setTenantDb] = useState({ summary: {}, hospitals: [], backups: [], connection_status: [] });
-  const [gatewayOps, setGatewayOps] = useState({ providers: [], settlementSummary: {}, settlements: [] });
-  const [analytics, setAnalytics] = useState({ metrics: {}, forecast: [], churn_risk: [], notes: [] });
-  const [settlementForm, setSettlementForm] = useState({ gateway: 'manual_gateway_ready', from_date: '', to_date: '', settlement_reference: '' });
-  const [kb, setKb] = useState({ articles: [], publicArticles: [] });
-  const [kbQuery, setKbQuery] = useState('');
-  const [kbForm, setKbForm] = useState({ title: '', slug: '', category: 'getting-started', summary: '', body: '', visibility: 'tenant_admin', status: 'draft', tags: '' });
 
   async function load() {
     setLoading(true);
     try {
-      const [res, invoiceRes, billingRes, intentRes, planRes, licenseRes, tenantDbRes, gatewayRes, settlementSummaryRes, settlementsRes, analyticsRes, kbRes, publicKbRes] = await Promise.all([
+      const [res, invoiceRes, billingRes, intentRes, planRes, licenseRes, tenantDbRes] = await Promise.all([
         saasApi.overview(),
         saasApi.invoices(),
         saasApi.billingSummary(),
@@ -58,21 +52,12 @@ export default function SaasControl() {
         saasApi.businessPlans(),
         saasApi.licenseStatus().catch(() => ({ data: null })),
         saasApi.tenantDbOverview().catch(() => ({ data: { summary: {}, hospitals: [], backups: [], connection_status: [] } })),
-        saasApi.paymentGateways().catch(() => ({ data: [] })),
-        saasApi.settlementSummary().catch(() => ({ data: {} })),
-        saasApi.settlements().catch(() => ({ data: [] })),
-        saasApi.subscriptionAnalytics().catch(() => ({ data: { metrics: {}, forecast: [], churn_risk: [], notes: [] } })),
-        saasApi.knowledgeBase().catch(() => ({ data: [] })),
-        saasApi.publicKnowledgeBase().catch(() => ({ data: [] })),
       ]);
       setData(res.data || { summary: {}, tenants: [], plans: [] });
       setBilling({ invoices: invoiceRes.data || [], summary: billingRes.data || {}, intents: intentRes.data || [] });
       setBusinessPlans(planRes.data || []);
       setLicense(licenseRes.data || null);
       setTenantDb(tenantDbRes.data || { summary: {}, hospitals: [], backups: [], connection_status: [] });
-      setGatewayOps({ providers: gatewayRes.data || [], settlementSummary: settlementSummaryRes.data || {}, settlements: settlementsRes.data || [] });
-      setAnalytics(analyticsRes.data || { metrics: {}, forecast: [], churn_risk: [], notes: [] });
-      setKb({ articles: kbRes.data || [], publicArticles: publicKbRes.data || [] });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load SaaS control center');
     } finally {
@@ -191,7 +176,7 @@ export default function SaasControl() {
 
   async function createPaymentLink(invoice) {
     try {
-      const res = await saasApi.createPaymentLink(invoice.id, { amount: invoice.balance_amount || invoice.total_amount, gateway: settlementForm.gateway || 'manual_gateway_ready' });
+      const res = await saasApi.createPaymentLink(invoice.id, { amount: invoice.balance_amount || invoice.total_amount });
       const url = res.data?.intent?.payment_link_url;
       if (url && navigator.clipboard) await navigator.clipboard.writeText(url);
       toast.success(url ? 'Payment link created and copied' : 'Payment link created');
@@ -262,40 +247,6 @@ export default function SaasControl() {
     }
   }
 
-
-  async function saveKnowledgeArticle(e) {
-    e.preventDefault();
-    if (!kbForm.title || !kbForm.body) return toast.error('Knowledge article title and body are required');
-    try {
-      await saasApi.createKnowledgeArticle({ ...kbForm, tags: kbForm.tags });
-      toast.success('Knowledge article saved');
-      setKbForm({ title: '', slug: '', category: 'getting-started', summary: '', body: '', visibility: 'tenant_admin', status: 'draft', tags: '' });
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Knowledge article save failed');
-    }
-  }
-
-  async function publishKnowledgeArticle(article) {
-    try {
-      await saasApi.publishKnowledgeArticle(article.id);
-      toast.success('Knowledge article published');
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Publish failed');
-    }
-  }
-
-  async function archiveKnowledgeArticle(article) {
-    try {
-      await saasApi.archiveKnowledgeArticle(article.id);
-      toast.success('Knowledge article archived');
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Archive failed');
-    }
-  }
-
   async function exportInvoices() {
     try {
       const res = await saasApi.exportInvoices();
@@ -307,34 +258,6 @@ export default function SaasControl() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invoice export failed');
-    }
-  }
-
-
-  async function reconcileSettlement(e) {
-    e.preventDefault();
-    if (!settlementForm.gateway) return toast.error('Select a gateway');
-    try {
-      await saasApi.reconcileSettlement(settlementForm);
-      toast.success('Gateway settlement reconciled');
-      setSettlementForm({ gateway: settlementForm.gateway, from_date: '', to_date: '', settlement_reference: '' });
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Settlement reconciliation failed');
-    }
-  }
-
-  async function exportSettlements() {
-    try {
-      const res = await saasApi.exportSettlements();
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'saas-gateway-settlements.csv';
-      link.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Settlement export failed');
     }
   }
 
@@ -353,20 +276,7 @@ export default function SaasControl() {
   }
 
   const summary = data.summary || {};
-  const billingSummary = billing.summary || {};
-  const collectionRate = Number(billingSummary.total_billed || 0) > 0 ? Math.round((Number(billingSummary.total_collected || 0) / Number(billingSummary.total_billed || 1)) * 100) : 0;
-  const analyticsMetrics = analytics.metrics || {};
-  const churnRiskRows = analytics.churn_risk || [];
-  const highRiskChurnRows = churnRiskRows.filter((row) => row.risk_level === 'high');
   const riskyTenants = (data.tenants || []).filter((t) => t.warnings?.length);
-  const highUsageTenants = (data.tenants || [])
-    .map((tenant) => ({
-      ...tenant,
-      maxUsage: Math.max(...Object.values(tenant.limitHealth || {}).map((item) => Number(item?.percent || 0)), 0),
-    }))
-    .filter((tenant) => tenant.maxUsage >= 75 || tenant.warnings?.length)
-    .sort((a, b) => b.maxUsage - a.maxUsage)
-    .slice(0, 5);
 
   return (
     <section className="saasControl">
@@ -389,50 +299,6 @@ export default function SaasControl() {
         <div className="statCard"><span>Needs attention</span><strong>{riskyTenants.length}</strong><small>Limit/subscription warnings</small><ShieldAlert size={24} /></div>
       </div>
 
-      <div className="grid twoCol saasPanels commercialDashboard">
-        <div className="card">
-          <div className="sectionTitleRow compact"><div><h3>Commercial operations dashboard</h3><p>Billing KPIs for SaaS subscriptions without mixing tenant patient billing.</p></div></div>
-          <div className="statsGrid saasStats compactStats">
-            <div className="statCard"><span>Collection rate</span><strong>{collectionRate}%</strong><small>{money(billingSummary.total_collected)} collected</small><CreditCard size={24} /></div>
-            <div className="statCard"><span>Outstanding</span><strong>{money(billingSummary.total_due)}</strong><small>Open subscription dues</small><ShieldAlert size={24} /></div>
-            <div className="statCard"><span>Invoices</span><strong>{billingSummary.total_invoices || 0}</strong><small>{Object.entries(billingSummary.by_status || {}).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No invoices yet'}</small><ReceiptText size={24} /></div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="sectionTitleRow compact"><div><h3>High usage tenants</h3><p>Tenants close to plan limits or subscription risk.</p></div></div>
-          <div className="planBreakdown">
-            {highUsageTenants.map((tenant) => (
-              <div className="planLine" key={tenant.id}>
-                <div><ShieldAlert size={16} /><b>{tenant.name}</b><span>{tenant.plan} · peak usage {tenant.maxUsage}%</span></div>
-                <strong>{tenant.subscription?.status || tenant.status}</strong>
-              </div>
-            ))}
-            {!highUsageTenants.length && <p className="muted">No usage risk detected.</p>}
-          </div>
-        </div>
-      </div>
-
-
-      <div className="grid twoCol saasPanels commercialDashboard">
-        <div className="card">
-          <div className="sectionTitleRow compact"><div><h3>Subscription analytics</h3><p>Forward-looking SaaS metrics based only on platform subscription data.</p></div></div>
-          <div className="statsGrid saasStats compactStats">
-            <div className="statCard"><span>MRR</span><strong>{money(analyticsMetrics.mrr)}</strong><small>ARR {money(analyticsMetrics.arr)}</small><TrendingUp size={24} /></div>
-            <div className="statCard"><span>At-risk MRR</span><strong>{money(analyticsMetrics.at_risk_mrr)}</strong><small>{analyticsMetrics.high_risk_tenants || 0} high-risk tenants</small><ShieldAlert size={24} /></div>
-            <div className="statCard"><span>Collection health</span><strong>{analyticsMetrics.collection_rate || 0}%</strong><small>{analyticsMetrics.overdue_invoice_count || 0} overdue invoices</small><Activity size={24} /></div>
-          </div>
-          <div className="planBreakdown miniPlanList">
-            {(analytics.forecast || []).slice(0, 6).map((row) => <div className="planLine" key={row.month}><div><TrendingUp size={16} /><b>{row.label}</b><span>{row.active_tenants} active tenants</span></div><strong>{money(row.projected_mrr)}</strong></div>)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="sectionTitleRow compact"><div><h3>Churn risk signals</h3><p>Prioritise tenant follow-ups before subscription loss or suspension.</p></div></div>
-          <div className="planBreakdown miniPlanList">
-            {churnRiskRows.slice(0, 6).map((row) => <div className="planLine" key={row.hospital_id}><div><ShieldAlert size={16} /><b>{row.hospital_name}</b><span>{row.risk_level} risk · score {row.risk_score} · {row.reasons?.join(', ') || 'stable'}</span></div><strong>{money(row.outstanding_amount)}</strong></div>)}
-            {!churnRiskRows.length && <p className="muted">No churn risk data available yet.</p>}
-          </div>
-        </div>
-      </div>
 
       {license && (
         <div className="card licenseStrip">
@@ -622,59 +488,6 @@ export default function SaasControl() {
         </div>
       </div>
 
-
-      <div className="card saasBillingPanel">
-        <div className="sectionTitleRow">
-          <div>
-            <h2>Knowledge base & self-service help center</h2>
-            <p>Publish help articles for tenant admins and keep internal drafts controlled by super admins.</p>
-          </div>
-          <div className="headerActions"><span className="statusPill statusPill-active">{(kb.publicArticles || []).length} portal articles</span></div>
-        </div>
-        <form className="invoiceBuilder planBuilder" onSubmit={saveKnowledgeArticle}>
-          <input placeholder="Article title" value={kbForm.title} onChange={(e) => setKbForm({ ...kbForm, title: e.target.value, slug: kbForm.slug || e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') })} />
-          <input placeholder="Slug" value={kbForm.slug} onChange={(e) => setKbForm({ ...kbForm, slug: e.target.value })} />
-          <select value={kbForm.category} onChange={(e) => setKbForm({ ...kbForm, category: e.target.value })}>
-            <option value="getting-started">Getting started</option>
-            <option value="billing">Billing</option>
-            <option value="support">Support</option>
-            <option value="security">Security</option>
-            <option value="integrations">Integrations</option>
-          </select>
-          <select value={kbForm.visibility} onChange={(e) => setKbForm({ ...kbForm, visibility: e.target.value })}>
-            <option value="tenant_admin">Tenant admin portal</option>
-            <option value="public">Public</option>
-            <option value="internal">Internal only</option>
-          </select>
-          <select value={kbForm.status} onChange={(e) => setKbForm({ ...kbForm, status: e.target.value })}>
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-          </select>
-          <input placeholder="Tags comma separated" value={kbForm.tags} onChange={(e) => setKbForm({ ...kbForm, tags: e.target.value })} />
-          <input className="wideInput" placeholder="Short summary" value={kbForm.summary} onChange={(e) => setKbForm({ ...kbForm, summary: e.target.value })} />
-          <textarea className="wideInput" rows="4" placeholder="Help article body" value={kbForm.body} onChange={(e) => setKbForm({ ...kbForm, body: e.target.value })} />
-          <button type="submit"><BookOpen size={16} /> Save article</button>
-        </form>
-        <div className="sectionTitleRow compact gatewayTitle"><div><h3>Published self-service portal preview</h3><p>These articles are visible through the safe public/tenant-admin knowledge endpoint.</p></div><div className="searchInput"><Search size={14} /><input placeholder="Filter articles" value={kbQuery} onChange={(e) => setKbQuery(e.target.value)} /></div></div>
-        <div className="tenantUsageList invoiceList">
-          {(kb.articles || []).filter((article) => !kbQuery || [article.title, article.category, article.summary].some((v) => String(v || '').toLowerCase().includes(kbQuery.toLowerCase()))).slice(0, 10).map((article) => (
-            <article className="tenantUsageCard invoiceCard" key={article.id}>
-              <div className="tenantUsageHead">
-                <div><h3>{article.title}</h3><p>{article.category} · {article.visibility} · /help/{article.slug}</p></div>
-                <div className="tenantTags"><span className={`statusPill statusPill-${article.status}`}>{article.status}</span></div>
-              </div>
-              <p className="muted">{article.summary || String(article.body || '').slice(0, 140)}</p>
-              <div className="billingMeta"><span>Views: {article.view_count || 0}</span><span>Tags: {(article.tags || []).join(', ') || '—'}</span><span>Updated: {article.updated_at || '—'}</span></div>
-              <div className="invoicePaymentRow">
-                {article.status !== 'published' && <button type="button" className="ghostBtn" onClick={() => publishKnowledgeArticle(article)}><CheckCircle2 size={14} /> Publish</button>}
-                {article.status !== 'archived' && <button type="button" className="ghostBtn dangerText" onClick={() => archiveKnowledgeArticle(article)}>Archive</button>}
-              </div>
-            </article>
-          ))}
-          {!(kb.articles || []).length && <p className="muted">No knowledge base articles yet.</p>}
-        </div>
-      </div>
-
       <div className="card saasBillingPanel">
         <div className="sectionTitleRow">
           <div>
@@ -744,49 +557,6 @@ export default function SaasControl() {
             );
           })}
           {!(billing.invoices || []).length && <p className="muted">No SaaS subscription invoices generated yet.</p>}
-        </div>
-
-
-        <div className="sectionTitleRow compact gatewayTitle">
-          <div>
-            <h3>Gateway providers & settlements</h3>
-            <p>Provider readiness, gateway fee visibility and admin settlement reconciliation.</p>
-          </div>
-          <button type="button" className="ghostBtn" onClick={exportSettlements}><Download size={16} /> Export settlements</button>
-        </div>
-        <div className="statsGrid saasStats compactStats">
-          <div className="statCard"><span>Gateway gross</span><strong>{money(gatewayOps.settlementSummary?.gross_amount)}</strong><small>{gatewayOps.settlementSummary?.payment_count || 0} gateway payments</small><CreditCard size={24} /></div>
-          <div className="statCard"><span>Gateway fees</span><strong>{money(gatewayOps.settlementSummary?.gateway_fee)}</strong><small>Estimated/provider fee</small><IndianRupee size={24} /></div>
-          <div className="statCard"><span>Net settlement</span><strong>{money(gatewayOps.settlementSummary?.net_amount)}</strong><small>{gatewayOps.settlementSummary?.unsettled_count || 0} unsettled</small><ReceiptText size={24} /></div>
-        </div>
-        <div className="grid twoCol saasPanels">
-          <div className="card">
-            <div className="sectionTitleRow compact"><div><h3>Provider adapter readiness</h3><p>Secrets/config can be connected without changing invoice flow.</p></div></div>
-            <div className="planBreakdown">
-              {(gatewayOps.providers || []).map((provider) => (
-                <div className="planLine" key={provider.id}>
-                  <div><CreditCard size={16} /><b>{provider.name}</b><span>{provider.mode} · fee {provider.fee_percent || 0}%</span></div>
-                  <strong>{provider.configured ? 'Configured' : provider.webhook_configured ? 'Webhook ready' : 'Ready'}</strong>
-                </div>
-              ))}
-              {!(gatewayOps.providers || []).length && <p className="muted">No gateway provider metadata loaded.</p>}
-            </div>
-          </div>
-          <div className="card">
-            <div className="sectionTitleRow compact"><div><h3>Reconcile settlement</h3><p>Mark gateway payments as settled after provider payout.</p></div></div>
-            <form className="invoiceBuilder planBuilder" onSubmit={reconcileSettlement}>
-              <select value={settlementForm.gateway} onChange={(e) => setSettlementForm({ ...settlementForm, gateway: e.target.value })}>
-                {(gatewayOps.providers || [{ id: 'manual_gateway_ready', name: 'Manual / Gateway-ready' }]).map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-              </select>
-              <input type="date" value={settlementForm.from_date} onChange={(e) => setSettlementForm({ ...settlementForm, from_date: e.target.value })} />
-              <input type="date" value={settlementForm.to_date} onChange={(e) => setSettlementForm({ ...settlementForm, to_date: e.target.value })} />
-              <input placeholder="Settlement reference" value={settlementForm.settlement_reference} onChange={(e) => setSettlementForm({ ...settlementForm, settlement_reference: e.target.value })} />
-              <button type="submit"><CheckCircle2 size={16} /> Reconcile settlement</button>
-            </form>
-            <div className="planBreakdown miniPlanList">
-              {(gatewayOps.settlements || []).slice(0, 5).map((row) => <div className="planLine" key={row.id}><div><ReceiptText size={16} /><b>{row.settlement_reference}</b><span>{row.gateway} · {row.settlement_date}</span></div><strong>{money(row.net_amount)}</strong></div>)}
-            </div>
-          </div>
         </div>
 
         <div className="sectionTitleRow compact gatewayTitle">

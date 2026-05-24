@@ -11,5 +11,4 @@ export const labApi = {
   createTemplate: (payload) => api.post("/lab/templates", payload),
   updateTemplate: (id, payload) => api.put(`/lab/templates/${id}`, payload),
   machineOrders: () => api.get("/lab/machine-api/orders"),
-  archive: (id, reason) => api.delete(`/lab/tests/${id}`, { data: { reason } }),
 };

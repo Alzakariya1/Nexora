@@ -6,15 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview",
-    "check:phase8b-frontend": "node scripts/phase8b-frontend-testing-check.cjs",
-    "test:frontend": "npm run check:phase8b-frontend",
-    "check:phase8c-e2e": "node scripts/phase8c-e2e-check.cjs",
-    "test:e2e": "npm run check:phase8c-e2e",
-    "check:phase8d-performance": "node scripts/phase8d-performance-check.cjs",
-    "test:performance": "npm run check:phase8d-performance",
-    "check:phase8e-production": "node scripts/phase8e-production-check.cjs",
-    "test:production": "npm run test:frontend && npm run test:e2e && npm run test:performance && npm run check:phase8e-production && npm run build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

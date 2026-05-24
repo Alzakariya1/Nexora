@@ -45,12 +45,12 @@ async function buildClinicalSummary(req, patientId) {
   if (!patient) return null;
   const filter = patientRecordFilter(req, patient);
   const [records, appointments, opd, prescriptions, labs, radiology, bills, admissions] = await Promise.all([
-    ClinicalRecord.find({ ...filter, status: { $ne: 'archived' } }).sort({ record_date: -1, id: -1 }).lean(),
+    ClinicalRecord.find(filter).sort({ record_date: -1, id: -1 }).lean(),
     Appointment.find(filter).sort({ appointment_date: -1, appointment_time: -1 }).limit(10).lean(),
-    OpdRecord.find({ ...filter, status: { $ne: 'archived' } }).sort({ created_at: -1, id: -1 }).limit(10).lean(),
+    OpdRecord.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
     Prescription.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
-    LabTest.find({ ...filter, test_status: { $ne: 'archived' } }).sort({ created_at: -1, id: -1 }).limit(10).lean(),
-    RadiologyTest.find({ ...filter, status: { $ne: 'archived' } }).sort({ created_at: -1, id: -1 }).limit(10).lean(),
+    LabTest.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
+    RadiologyTest.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
     Billing.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
     IpdAdmission.find(filter).sort({ created_at: -1, id: -1 }).limit(10).lean(),
   ]);
@@ -161,9 +161,9 @@ router.put('/emr/records/:id', requirePermission('emr.edit'), asyncHandler(async
 router.delete('/emr/records/:id', requirePermission('emr.delete'), asyncHandler(async (req, res) => {
   const existing = await ClinicalRecord.findOne(tenantFilter(req, { id: Number(req.params.id) }));
   if (!existing) return res.status(404).json({ message: 'Clinical record not found' });
-  await ClinicalRecord.updateOne(tenantFilter(req, { id: Number(req.params.id) }), { $set: { status: 'archived', archived_at: new Date(), archived_by: req.user?.id } });
-  auditEvent({ req, action: 'Archived EMR record', module_name: 'emr', entity_type: 'clinical_record', entity_id: req.params.id, old_value: existing });
-  res.json({ message: 'Clinical record archived' });
+  await ClinicalRecord.deleteOne(tenantFilter(req, { id: Number(req.params.id) }));
+  auditEvent({ req, action: 'Deleted EMR record', module_name: 'emr', entity_type: 'clinical_record', entity_id: req.params.id, old_value: existing });
+  res.json({ message: 'Clinical record deleted' });
 }));
 
 module.exports = router;

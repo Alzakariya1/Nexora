@@ -65,7 +65,6 @@ export default function Appointments({
   setAppointmentPage,
   appointmentTotalPages,
   doctors = [],
-  patients = [],
   doctorSchedules = [],
   scheduleForm,
   setScheduleForm,
@@ -81,27 +80,13 @@ export default function Appointments({
   const emptyPrescriptionItem = { medicine_name: "", dosage: "", frequency: "", duration: "", instructions: "" };
   const emptyConsultation = {
     chief_complaint: "",
-    history_present_illness: "",
-    past_history: "",
-    medication_history: "",
-    surgical_history: "",
-    family_history: "",
-    allergies: "",
     bp: "",
     pulse: "",
     temperature: "",
     spo2: "",
-    weight: "",
-    height: "",
-    respiratory_rate: "",
-    pain_score: "",
-    examination_findings: "",
     diagnosis: "",
-    diagnosis_code: "",
     clinical_notes: "",
     treatment_plan: "",
-    advice: "",
-    referral_notes: "",
     follow_up_date: "",
     prescriptions: [{ ...emptyPrescriptionItem }],
     generate_bill: true,
@@ -137,13 +122,6 @@ export default function Appointments({
     waiting: queueRows.filter((a) => a.status === "checked_in").length,
     inConsultation: queueRows.filter((a) => a.status === "in_consultation").length,
   }), [queueRows]);
-
-  const isEditingAppointment = !!appointment?.id;
-  const scheduleChanged = isEditingAppointment && (
-    String(appointment.doctor_id || "") !== String(appointment.original_doctor_id || "") ||
-    String(appointment.appointment_date || "") !== String(appointment.original_appointment_date || "") ||
-    String(appointment.appointment_time || "") !== String(appointment.original_appointment_time || "")
-  );
 
   const callNextPatient = () => {
     const next = queueRows.find((a) => a.status === "checked_in") || queueRows.find((a) => (a.status || "scheduled") === "scheduled");
@@ -187,33 +165,12 @@ export default function Appointments({
       doctor_id: consultationFor.doctor_id,
       visit_date: consultationFor.appointment_date || today,
       chief_complaint: consultation.chief_complaint,
-      history_present_illness: consultation.history_present_illness,
-      past_history: consultation.past_history,
-      medication_history: consultation.medication_history,
-      surgical_history: consultation.surgical_history,
-      family_history: consultation.family_history,
-      allergies: consultation.allergies,
-      vitals: {
-        bp: consultation.bp,
-        pulse: consultation.pulse,
-        temperature: consultation.temperature,
-        spo2: consultation.spo2,
-        weight: consultation.weight,
-        height: consultation.height,
-        respiratory_rate: consultation.respiratory_rate,
-        pain_score: consultation.pain_score,
-      },
-      examination_findings: consultation.examination_findings,
+      vitals: { bp: consultation.bp, pulse: consultation.pulse, temperature: consultation.temperature, spo2: consultation.spo2 },
       diagnosis: consultation.diagnosis,
-      final_diagnosis: consultation.diagnosis,
-      diagnosis_code: consultation.diagnosis_code,
       clinical_notes: consultation.clinical_notes,
       treatment_plan: consultation.treatment_plan,
-      advice: consultation.advice,
-      referral_notes: consultation.referral_notes,
       follow_up_date: consultation.follow_up_date,
       status: "completed",
-      finalize: true,
       prescriptions: consultation.prescriptions,
       generate_bill: consultation.generate_bill,
       consultation_fee: consultation.consultation_fee,
@@ -436,13 +393,8 @@ export default function Appointments({
 
           <div className="appointmentFormGrid">
             <label>
-              <span>Patient</span>
-              <input required list="appointment-patients" placeholder="Search/select patient ID" value={appointment.patient_id || ""} onChange={(e) => handleField("patient_id", e.target.value)} />
-              <datalist id="appointment-patients">
-                {patients.map((patient) => (
-                  <option key={patient.id || patient.patient_id} value={patient.patient_id || patient.id}>{patient.full_name || patient.patient_id || patient.id}</option>
-                ))}
-              </datalist>
+              <span>Patient ID</span>
+              <input required placeholder="e.g. PAT-001 or 1" value={appointment.patient_id || ""} onChange={(e) => handleField("patient_id", e.target.value)} />
             </label>
             <label>
               <span>Doctor</span>
@@ -473,12 +425,6 @@ export default function Appointments({
                 {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
-            {scheduleChanged && (
-              <label className="appointmentNotes">
-                <span>Reschedule Reason</span>
-                <textarea rows="2" required placeholder="Required because doctor/date/time changed" value={appointment.reschedule_reason || ""} onChange={(e) => handleField("reschedule_reason", e.target.value)} />
-              </label>
-            )}
             <label className="appointmentNotes">
               <span>Notes</span>
               <textarea rows="3" placeholder="Reason, symptoms, internal notes..." value={appointment.notes || ""} onChange={(e) => handleField("notes", e.target.value)} />
@@ -486,8 +432,7 @@ export default function Appointments({
           </div>
 
           <div className="appointmentFormActions">
-            <button type="submit">{isEditingAppointment ? "Update Appointment" : "Save Appointment"}</button>
-            {isEditingAppointment && <button type="button" className="ghostBtn" onClick={() => setAppointment({ patient_id: "", doctor_id: "", appointment_date: "", appointment_time: "", appointment_type: "opd", status: "scheduled", notes: "" })}>New Appointment</button>}
+            <button type="submit">Save Appointment</button>
           </div>
         </form>
       )}
@@ -506,26 +451,15 @@ export default function Appointments({
               <div className="opdPanelBlock">
                 <h3>Clinical Notes</h3>
                 <label><span>Chief Complaint</span><input required value={consultation.chief_complaint} onChange={(e) => handleConsultationField("chief_complaint", e.target.value)} placeholder="Fever, pain, follow-up..." /></label>
-                <label><span>History of Present Illness</span><textarea rows="2" value={consultation.history_present_illness} onChange={(e) => handleConsultationField("history_present_illness", e.target.value)} /></label>
                 <div className="appointmentFormGrid compactVitals">
                   <label><span>BP</span><input value={consultation.bp} onChange={(e) => handleConsultationField("bp", e.target.value)} placeholder="120/80" /></label>
                   <label><span>Pulse</span><input value={consultation.pulse} onChange={(e) => handleConsultationField("pulse", e.target.value)} placeholder="78" /></label>
                   <label><span>Temp</span><input value={consultation.temperature} onChange={(e) => handleConsultationField("temperature", e.target.value)} placeholder="98.6" /></label>
                   <label><span>SpO2</span><input value={consultation.spo2} onChange={(e) => handleConsultationField("spo2", e.target.value)} placeholder="98%" /></label>
-                  <label><span>Weight</span><input value={consultation.weight} onChange={(e) => handleConsultationField("weight", e.target.value)} placeholder="kg" /></label>
-                  <label><span>Pain Score</span><input value={consultation.pain_score} onChange={(e) => handleConsultationField("pain_score", e.target.value)} placeholder="0-10" /></label>
                 </div>
-                <label><span>Allergies</span><textarea rows="2" value={consultation.allergies} onChange={(e) => handleConsultationField("allergies", e.target.value)} placeholder="One allergy per line" /></label>
-                <label><span>Past History</span><textarea rows="2" value={consultation.past_history} onChange={(e) => handleConsultationField("past_history", e.target.value)} /></label>
-                <label><span>Examination Findings</span><textarea rows="2" value={consultation.examination_findings} onChange={(e) => handleConsultationField("examination_findings", e.target.value)} /></label>
-                <div className="appointmentFormGrid compactVitals">
-                  <label><span>Diagnosis</span><input required value={consultation.diagnosis} onChange={(e) => handleConsultationField("diagnosis", e.target.value)} /></label>
-                  <label><span>ICD/Code</span><input value={consultation.diagnosis_code} onChange={(e) => handleConsultationField("diagnosis_code", e.target.value)} placeholder="Optional" /></label>
-                </div>
+                <label><span>Diagnosis</span><input required value={consultation.diagnosis} onChange={(e) => handleConsultationField("diagnosis", e.target.value)} /></label>
                 <label><span>Clinical Notes</span><textarea rows="3" value={consultation.clinical_notes} onChange={(e) => handleConsultationField("clinical_notes", e.target.value)} /></label>
                 <label><span>Treatment Plan</span><textarea rows="3" value={consultation.treatment_plan} onChange={(e) => handleConsultationField("treatment_plan", e.target.value)} /></label>
-                <label><span>Advice</span><textarea rows="2" value={consultation.advice} onChange={(e) => handleConsultationField("advice", e.target.value)} /></label>
-                <label><span>Referral Notes</span><textarea rows="2" value={consultation.referral_notes} onChange={(e) => handleConsultationField("referral_notes", e.target.value)} /></label>
                 <label><span>Follow-up Date</span><input type="date" value={consultation.follow_up_date} onChange={(e) => handleConsultationField("follow_up_date", e.target.value)} /></label>
               </div>
 
@@ -563,7 +497,7 @@ export default function Appointments({
                 </div>
               </div>
             </div>
-            <div className="formActions"><button type="submit">Finalize Consultation, Prescription & Bill</button></div>
+            <div className="formActions"><button type="submit">Save Consultation, Prescription & Bill</button></div>
           </form>
         </div>
       )}
@@ -638,7 +572,7 @@ export default function Appointments({
                       <button type="button" className="ghostBtn" onClick={() => updateAppointmentStatus(a, "no_show")}>No Show</button>
                     )}
                     {permissions.appointmentEdit && <button type="button" className="ghostBtn" onClick={() => { editAppointment(a); setShowForm(true); }}>Edit</button>}
-                    {permissions.appointmentStatusUpdate && !["completed", "cancelled", "archived"].includes(a.status) && (
+                    {permissions.appointmentStatusUpdate && !["completed", "cancelled"].includes(a.status) && (
                       <button type="button" className="dangerGhost" onClick={() => updateAppointmentStatus(a, "cancelled")}>Cancel</button>
                     )}
                     {permissions.appointmentDelete && <button type="button" className="dangerGhost" onClick={() => deleteAppointment(a)}>Delete</button>}

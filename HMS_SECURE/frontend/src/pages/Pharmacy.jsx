@@ -88,19 +88,6 @@ export default function Pharmacy({ med, setMed, addMedicine, meds = [], permissi
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function archiveMedicine(row) {
-    const reason = window.prompt(`Archive ${row.name}? Enter reason:`, "Inactive / no longer used");
-    if (reason === null) return;
-    try {
-      await pharmacyApi.archive(row.id, reason || "Archived from pharmacy screen");
-      toast.success("Medicine archived");
-      await onChanged?.();
-      await refreshPharmacy();
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Medicine archive failed");
-    }
-  }
-
   async function adjustStock(e) {
     e.preventDefault();
     try {
@@ -212,22 +199,12 @@ export default function Pharmacy({ med, setMed, addMedicine, meds = [], permissi
           <div><h3>Medicine Inventory</h3><p className="muted">Search stock by medicine, batch, category or vendor.</p></div>
           <div className="pharmacyFilters"><input placeholder="Search medicines..." value={search} onChange={(e) => setSearch(e.target.value)} /><select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}><option value="all">All Stock</option><option value="in">In Stock</option><option value="low">Low Stock</option><option value="out">Out of Stock</option></select></div>
         </div>
-        <DataTable rows={tableRows} onEdit={permissions.pharmacyStockManage ? editMedicine : null} onDelete={permissions.pharmacyStockManage ? archiveMedicine : null} />
+        <DataTable rows={tableRows} onEdit={permissions.pharmacyStockManage ? editMedicine : null} />
       </div>
 
       <div className="card pharmacySalesCard">
         <h3>Recent Pharmacy Sales</h3>
-        <DataTable
-          rows={sales.map((s) => ({
-            sale_number: s.sale_number,
-            medicine_name: s.medicine_name,
-            patient_id: s.patient_id,
-            quantity: s.quantity,
-            selling_price: currency(s.selling_price),
-            total_amount: currency(s.total_amount),
-            sold_at: s.sold_at ? new Date(s.sold_at).toLocaleString() : "—",
-          }))}
-        />
+        <DataTable rows={sales.map((s) => ({ ...s, total_amount: currency(s.total_amount), sold_at: s.sold_at ? new Date(s.sold_at).toLocaleString() : "—" }))} />
       </div>
     </section>
   );

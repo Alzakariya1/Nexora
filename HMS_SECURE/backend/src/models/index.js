@@ -22,7 +22,7 @@ async function nextId(name, db) {
 const TENANT_COLLECTIONS = new Set([
     "departments", "patients", "doctors", "doctor_schedules", "appointments", "beds",
     "opd_records", "ipd_admissions", "nursing_notes", "lab_test_templates", "lab_tests",
-    "radiology_tests", "medicines", "pharmacy_sales", "billing", "billings", "insurance_claims",
+    "radiology_tests", "medicines", "pharmacy_sales", "billings", "insurance_claims",
     "prescriptions", "clinical_records", "audit_logs", "login_history", "security_settings",
     "dynamic_fields", "templates", "notifications", "communication_logs", "suppliers",
     "inventory_items", "inventory_batches", "purchase_orders", "supplier_bills",
@@ -30,15 +30,7 @@ const TENANT_COLLECTIONS = new Set([
     "incident_reports", "sop_documents", "compliance_checklists", "backup_verifications",
     "api_keys", "integration_logs", "webhook_subscriptions", "webhook_events",
     "data_requests", "security_incidents", "policy_acknowledgements",
-    "pilot_deployments", "pilot_tasks", "knowledge_base_articles",
-    "tenant_restore_requests", "tenant_data_exports", "tenant_disaster_recovery_logs",
-    "ot_bookings", "surgery_notes", "anaesthesia_notes", "post_op_notes", "ot_inventory_usages",
-    "nursing_vitals", "medication_administrations", "nursing_handover_notes", "nursing_care_plans", "nursing_shift_tasks",
-    "emergency_cases", "emergency_triage_notes", "emergency_clinical_notes", "emergency_transfers",
-    "blood_donors", "blood_units", "blood_requisitions", "blood_cross_matches", "blood_issue_records", "blood_reservations",
-    "staff_profiles", "staff_attendance", "staff_shift_rosters", "staff_leave_requests", "staff_payroll_exports",
-    "hl7_messages",
-    "abdm_consents", "abha_care_contexts"
+    "pilot_deployments", "pilot_tasks"
 ]);
 function tenantAwareModel(model, name, schema, collection) {
     if (!TENANT_COLLECTIONS.has(collection)) return model;
@@ -82,23 +74,6 @@ const User = makeModel("User", "users", {
     role: { type: String, default: "receptionist" },
     status: { type: String, default: "active" },
     permissions: { type: [String], default: [] },
-    failed_login_attempts: { type: Number, default: 0 },
-    locked_until: Date,
-    last_failed_login_at: Date,
-    password_changed_at: Date,
-});
-const AuthSession = makeModel("AuthSession", "auth_sessions", {
-    user_id: { type: Number, index: true },
-    hospital_id: { type: Number, default: 1, index: true },
-    session_id: { type: String, unique: true, index: true },
-    refresh_token_hash: { type: String, index: true },
-    user_agent: String,
-    ip: String,
-    status: { type: String, default: "active", index: true },
-    expires_at: { type: Date, index: true },
-    revoked_at: Date,
-    revoked_by: Number,
-    last_used_at: Date,
 });
 const Hospital = makeModel("Hospital", "hospitals", {
     hospital_code: { type: String, unique: true, sparse: true, index: true },
@@ -124,7 +99,7 @@ const Hospital = makeModel("Hospital", "hospitals", {
             notes: "",
         },
     },
-    enabled_modules: { type: [String], default: ['dashboard', 'commandCenter', 'patients', 'doctors', 'appointments', 'emr', 'beds', 'ipd', 'lab', 'radiology', 'pharmacy', 'inventory', 'bloodBank', 'hrStaff', 'billing', 'compliance', 'integration', 'profile', 'operations', 'tenants'] },
+    enabled_modules: { type: [String], default: ['dashboard', 'commandCenter', 'patients', 'doctors', 'appointments', 'emr', 'beds', 'lab', 'radiology', 'pharmacy', 'inventory', 'billing', 'compliance', 'integration', 'profile', 'operations', 'tenants'] },
     feature_flags: {
         type: Object,
         default: {
@@ -142,23 +117,6 @@ const Hospital = makeModel("Hospital", "hospitals", {
     },
     branding: { type: Object, default: {} },
     settings: { type: Object, default: {} },
-    branches: { type: [Object], default: [] },
-    onboarding: {
-        type: Object,
-        default: {
-            status: 'not_started',
-            current_step: 'hospital_profile',
-            completed_steps: [],
-            module_setup_done: false,
-            branding_done: false,
-            branch_setup_done: false,
-            admin_setup_done: false,
-            settings_done: false,
-            completed_at: null,
-            completed_by: null,
-            notes: '',
-        },
-    },
 });
 const Department = makeModel("Department", "departments", { hospital_id: { type: Number, default: 1, index: true } });
 
@@ -185,10 +143,6 @@ const Patient = makeModel("Patient", "patients", {
     emergency_contact_phone: String,
     insurance_provider: String,
     insurance_policy_number: String,
-
-    status: { type: String, default: "active", index: true },
-    deleted_at: Date,
-    deleted_by: Number,
 
     documents: [
         {
@@ -233,9 +187,7 @@ const Doctor = makeModel("Doctor", "doctors", {
     qualification: String,
     consultation_fee: Number,
     department_id: Number,
-    status: { type: String, default: "active", index: true },
-    deleted_at: Date,
-    deleted_by: Number,
+    status: { type: String, default: "active" },
     custom_fields: { type: Object, default: {} },
 
     // Reserved for the next doctor-profile phase. Keeping these schema fields now is backward compatible
@@ -306,21 +258,11 @@ const Appointment = makeModel("Appointment", "appointments", {
     completed_at: Date,
     cancelled_at: Date,
     cancellation_reason: String,
-    no_show_reason: String,
-    reschedule_reason: String,
-    rescheduled_at: Date,
-    previous_schedule: { type: Object, default: null },
-    deleted_at: Date,
-    deleted_by: Number,
     notes: String,
 });
 Appointment.schema.index(
-    { hospital_id: 1, doctor_id: 1, appointment_date: 1, appointment_time: 1, status: 1 },
+    { hospital_id: 1, doctor_id: 1, appointment_date: 1, appointment_time: 1 },
     { name: "appointment_doctor_slot_lookup" },
-);
-Appointment.schema.index(
-    { hospital_id: 1, appointment_date: 1, token_number: 1 },
-    { name: "appointment_daily_token_lookup" },
 );
 const Bed = makeModel("Bed", "beds", {
     hospital_id: { type: Number, default: 1, index: true },
@@ -332,45 +274,7 @@ Bed.schema.index(
     { hospital_id: 1, ward: 1, bed_number: 1 },
     { unique: true, name: "bed_hospital_ward_number_unique", partialFilterExpression: { bed_number: { $type: "string" } } },
 );
-const OpdRecord = makeModel("OpdRecord", "opd_records", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: { type: String, trim: true, index: true },
-    doctor_id: { type: String, trim: true, index: true },
-    appointment_id: Number,
-    visit_date: String,
-    chief_complaint: String,
-    history_present_illness: String,
-    past_history: String,
-    medication_history: String,
-    surgical_history: String,
-    family_history: String,
-    allergies: { type: [String], default: [] },
-    vitals: { type: Object, default: {} },
-    examination_findings: String,
-    diagnosis: String,
-    provisional_diagnosis: String,
-    final_diagnosis: String,
-    diagnosis_code: String,
-    clinical_notes: String,
-    treatment_plan: String,
-    advice: String,
-    referral_notes: String,
-    investigation_orders: { type: [Object], default: [] },
-    follow_up_date: String,
-    prescriptions: { type: [Object], default: [] },
-    status: { type: String, default: "completed", index: true },
-    is_finalized: { type: Boolean, default: false },
-    locked_at: Date,
-    finalized_by: Number,
-    archived_at: Date,
-    archived_by: Number,
-    archive_reason: String,
-    last_edit_reason: String,
-    last_edited_by: Number,
-    last_edited_at: Date,
-});
-OpdRecord.schema.index({ hospital_id: 1, patient_id: 1, visit_date: -1 }, { name: "opd_patient_visit_lookup" });
-OpdRecord.schema.index({ hospital_id: 1, doctor_id: 1, visit_date: -1 }, { name: "opd_doctor_visit_lookup" });
+const OpdRecord = makeModel("OpdRecord", "opd_records", { hospital_id: { type: Number, default: 1, index: true } });
 const IpdAdmission = makeModel("IpdAdmission", "ipd_admissions", { hospital_id: { type: Number, default: 1, index: true } });
 const NursingNote = makeModel("NursingNote", "nursing_notes", { hospital_id: { type: Number, default: 1, index: true } });
 const LabTestTemplate = makeModel("LabTestTemplate", "lab_test_templates", {
@@ -645,32 +549,6 @@ const Billing = makeModel("Billing", "billing", {
     status: { type: String, default: "pending", index: true },
     payment_status: { type: String, default: "pending", index: true },
     payment_mode: String,
-    transaction_id: String,
-    service_type: { type: String, default: "opd", index: true },
-    billing_type: { type: String, default: "opd", index: true },
-    visit_type: String,
-    admission_id: Number,
-    appointment_id: Number,
-    claim_id: Number,
-    corporate_name: String,
-    insurance_provider: String,
-    approval_status: { type: String, default: "not_required", index: true },
-    approval_reason: String,
-    approved_by: Number,
-    approved_at: Date,
-    advance_amount: { type: Number, default: 0 },
-    refund_amount: { type: Number, default: 0 },
-    refund_reason: String,
-    refunded_at: Date,
-    refunded_by: Number,
-    discount_reason: String,
-    cancel_reason: String,
-    cancelled_at: Date,
-    cancelled_by: Number,
-    is_archived: { type: Boolean, default: false, index: true },
-    archived_at: Date,
-    archived_by: Number,
-    archive_reason: String,
     notes: String,
     billing_date: Date,
 });
@@ -760,13 +638,6 @@ const ConsentForm = makeModel("ConsentForm", "consent_forms", {
     digital_signature: String,
     document_url: String,
     notes: String,
-    auto_generated: { type: Boolean, default: false },
-    generated_run_id: String,
-    reminder_count: { type: Number, default: 0 },
-    last_reminder_at: String,
-    next_reminder_at: String,
-    dunning_stage: { type: String, default: "none" }, // none, reminder, past_due, suspension_warning, suspended
-    dunning_notes: String,
     created_by: Number,
 });
 ConsentForm.schema.index({ hospital_id: 1, consent_number: 1 }, { unique: true, name: "consent_hospital_number_unique" });
@@ -874,14 +745,9 @@ const AuditLog = makeModel("AuditLog", "audit_logs", {
     user_agent: String,
     method: String,
     path: String,
-    reason: String,
-    changed_fields: { type: [String], default: [] },
-    metadata: { type: Object, default: {} },
 });
 AuditLog.schema.index({ hospital_id: 1, created_at: -1 }, { name: "audit_hospital_recent_lookup" });
 AuditLog.schema.index({ hospital_id: 1, module_name: 1, status: 1 }, { name: "audit_hospital_module_status_lookup" });
-AuditLog.schema.index({ hospital_id: 1, entity_type: 1, entity_id: 1, created_at: -1 }, { name: "audit_entity_timeline_lookup" });
-AuditLog.schema.index({ hospital_id: 1, severity: 1, created_at: -1 }, { name: "audit_severity_recent_lookup" });
 const LoginHistory = makeModel("LoginHistory", "login_history", {
     hospital_id: { type: Number, default: 1, index: true },
     user_id: { type: Number, index: true },
@@ -968,19 +834,10 @@ const SaaSInvoice = makeModel("SaaSInvoice", "saas_invoices", {
     balance_amount: { type: Number, default: 0 },
     status: { type: String, default: "pending", index: true }, // draft, pending, paid, partial, overdue, cancelled
     notes: String,
-    auto_generated: { type: Boolean, default: false },
-    generated_run_id: String,
-    reminder_count: { type: Number, default: 0 },
-    last_reminder_at: String,
-    next_reminder_at: String,
-    dunning_stage: { type: String, default: "none" }, // none, reminder, past_due, suspension_warning, suspended
-    dunning_notes: String,
     created_by: Number,
 });
 SaaSInvoice.schema.index({ hospital_id: 1, invoice_number: 1 }, { unique: true, name: "saas_invoice_hospital_number_unique" });
 SaaSInvoice.schema.index({ status: 1, due_date: 1 }, { name: "saas_invoice_status_due_lookup" });
-SaaSInvoice.schema.index({ hospital_id: 1, period_start: 1, period_end: 1, status: 1 }, { name: "saas_invoice_period_guardrail" });
-SaaSInvoice.schema.index({ next_reminder_at: 1, status: 1 }, { name: "saas_invoice_dunning_lookup" });
 
 const SaaSPayment = makeModel("SaaSPayment", "saas_payments", {
     hospital_id: { type: Number, required: true, index: true },
@@ -990,39 +847,11 @@ const SaaSPayment = makeModel("SaaSPayment", "saas_payments", {
     amount: { type: Number, default: 0 },
     payment_date: String,
     payment_mode: { type: String, default: "manual" },
-    gateway: { type: String, default: "manual", index: true },
     transaction_id: String,
-    gateway_fee: { type: Number, default: 0 },
-    net_amount: { type: Number, default: 0 },
-    settlement_status: { type: String, default: "unsettled", index: true }, // unsettled, settled, disputed
-    settlement_reference: String,
-    settled_at: String,
     received_by: Number,
     notes: String,
 });
 SaaSPayment.schema.index({ hospital_id: 1, invoice_id: 1, created_at: -1 }, { name: "saas_payment_invoice_lookup" });
-SaaSPayment.schema.index({ gateway: 1, settlement_status: 1, payment_date: 1 }, { name: "saas_payment_settlement_lookup" });
-SaaSPayment.schema.index({ hospital_id: 1, transaction_id: 1 }, { unique: true, name: "saas_payment_transaction_unique", partialFilterExpression: { transaction_id: { $type: "string", $ne: "" } } });
-
-
-
-const SaaSSettlement = makeModel("SaaSSettlement", "saas_settlements", {
-    settlement_number: { type: String, index: true },
-    gateway: { type: String, default: "manual_gateway_ready", index: true },
-    settlement_reference: { type: String, index: true },
-    settlement_date: String,
-    from_date: String,
-    to_date: String,
-    gross_amount: { type: Number, default: 0 },
-    gateway_fee: { type: Number, default: 0 },
-    net_amount: { type: Number, default: 0 },
-    payment_count: { type: Number, default: 0 },
-    status: { type: String, default: "settled", index: true }, // settled, partial, disputed
-    notes: String,
-    created_by: Number,
-});
-SaaSSettlement.schema.index({ gateway: 1, settlement_reference: 1 }, { unique: true, name: "saas_settlement_gateway_reference_unique", partialFilterExpression: { settlement_reference: { $type: "string" } } });
-SaaSSettlement.schema.index({ settlement_date: 1, gateway: 1 }, { name: "saas_settlement_date_gateway_lookup" });
 
 const SaaSPaymentIntent = makeModel("SaaSPaymentIntent", "saas_payment_intents", {
     hospital_id: { type: Number, required: true, index: true },
@@ -1043,7 +872,6 @@ const SaaSPaymentIntent = makeModel("SaaSPaymentIntent", "saas_payment_intents",
     created_by: Number,
 });
 SaaSPaymentIntent.schema.index({ hospital_id: 1, invoice_id: 1, status: 1 }, { name: "saas_payment_intent_invoice_lookup" });
-SaaSPaymentIntent.schema.index({ payment_link_id: 1 }, { unique: true, name: "saas_payment_intent_link_unique", partialFilterExpression: { payment_link_id: { $type: "string" } } });
 
 
 
@@ -1054,69 +882,21 @@ const CommunicationLog = makeModel("CommunicationLog", "communication_logs", {
     recipient_id: String,
     recipient_name: String,
     recipient_contact: String,
-    contact_normalized: String,
     title: String,
     message: String,
-    template_key: String,
-    template_version: Number,
     module: { type: String, default: "system", index: true },
     entity_type: String,
     entity_id: String,
-    status: { type: String, default: "queued", index: true }, // queued, sent, delivered, read, failed, skipped, cancelled
+    status: { type: String, default: "queued", index: true }, // queued, sent, failed, skipped
     provider: String,
     provider_message_id: String,
-    provider_status: String,
-    provider_payload: { type: Object, default: {} },
     error_message: String,
-    scheduled_for: Date,
-    retry_count: { type: Number, default: 0 },
-    next_retry_at: Date,
-    delivered_at: Date,
-    read_at: Date,
+    scheduled_for: String,
     sent_at: Date,
-    consent_checked: { type: Boolean, default: false },
     created_by: Number,
 });
 CommunicationLog.schema.index({ hospital_id: 1, created_at: -1 }, { name: "communication_hospital_recent_lookup" });
 CommunicationLog.schema.index({ hospital_id: 1, channel: 1, status: 1 }, { name: "communication_channel_status_lookup" });
-CommunicationLog.schema.index({ hospital_id: 1, scheduled_for: 1, status: 1 }, { name: "communication_schedule_status_lookup" });
-CommunicationLog.schema.index({ hospital_id: 1, provider_message_id: 1 }, { name: "communication_provider_message_lookup", partialFilterExpression: { provider_message_id: { $type: "string" } } });
-
-const CommunicationTemplate = makeModel("CommunicationTemplate", "communication_templates", {
-    hospital_id: { type: Number, default: 1, index: true },
-    template_key: { type: String, required: true, trim: true },
-    name: String,
-    channel: { type: String, default: "in_app", index: true },
-    category: { type: String, default: "general", index: true },
-    title_template: String,
-    message_template: String,
-    variables: { type: [String], default: [] },
-    provider_template_id: String,
-    language: { type: String, default: "en" },
-    status: { type: String, default: "draft", index: true }, // draft, approved, disabled
-    version: { type: Number, default: 1 },
-    approval_notes: String,
-    created_by: Number,
-    updated_by: Number,
-});
-CommunicationTemplate.schema.index({ hospital_id: 1, template_key: 1, channel: 1 }, { unique: true, name: "communication_template_key_channel_unique", partialFilterExpression: { template_key: { $type: "string" } } });
-CommunicationTemplate.schema.index({ hospital_id: 1, status: 1, channel: 1 }, { name: "communication_template_status_channel_lookup" });
-
-const CommunicationRule = makeModel("CommunicationRule", "communication_rules", {
-    hospital_id: { type: Number, default: 1, index: true },
-    name: String,
-    event_type: { type: String, required: true, index: true }, // appointment_reminder, report_ready, payment_due, follow_up
-    channels: { type: [String], default: ["in_app"] },
-    template_key: String,
-    offset_minutes: { type: Number, default: 0 },
-    is_active: { type: Boolean, default: true, index: true },
-    audience: { type: String, default: "patient" },
-    module: { type: String, default: "system" },
-    conditions: { type: Object, default: {} },
-    created_by: Number,
-    updated_by: Number,
-});
-CommunicationRule.schema.index({ hospital_id: 1, event_type: 1, is_active: 1 }, { name: "communication_rule_event_lookup" });
 
 const ApiKey = makeModel("ApiKey", "api_keys", {
     hospital_id: { type: Number, default: 1, index: true },
@@ -1192,30 +972,6 @@ const EnterpriseFeatureRecord = makeModel("EnterpriseFeatureRecord", "enterprise
 });
 EnterpriseFeatureRecord.schema.index({ hospital_id: 1, feature_key: 1, record_type: 1, created_at: -1 }, { name: "enterprise_feature_record_lookup" });
 
-
-
-const SaaSPaymentWebhook = makeModel("SaaSPaymentWebhook", "saas_payment_webhooks", {
-    hospital_id: { type: Number, default: 1, index: true },
-    invoice_id: Number,
-    invoice_number: String,
-    gateway: { type: String, default: "manual_gateway_ready", index: true },
-    event_id: { type: String, required: true, index: true },
-    event_type: String,
-    payment_link_id: String,
-    transaction_id: String,
-    amount: { type: Number, default: 0 },
-    currency: { type: String, default: "INR" },
-    status: { type: String, default: "received", index: true }, // received, verified, processed, duplicate, ignored, failed
-    signature_verified: { type: Boolean, default: false },
-    received_at: { type: Date, default: Date.now },
-    processed_at: Date,
-    idempotency_key: { type: String, required: true, index: true },
-    payload: { type: Object, default: {} },
-    error: String,
-});
-SaaSPaymentWebhook.schema.index({ gateway: 1, event_id: 1 }, { unique: true, name: "saas_webhook_gateway_event_unique" });
-SaaSPaymentWebhook.schema.index({ idempotency_key: 1 }, { unique: true, name: "saas_webhook_idempotency_unique" });
-SaaSPaymentWebhook.schema.index({ invoice_id: 1, status: 1, received_at: -1 }, { name: "saas_webhook_invoice_lookup" });
 
 const SaaSPlan = makeModel("SaaSPlan", "saas_plans", {
     plan_id: { type: String, unique: true, index: true },
@@ -1378,13 +1134,6 @@ const TenantBackup = makeModel("TenantBackup", "tenant_backups", {
     completed_at: Date,
     verified_at: Date,
     restore_tested_at: Date,
-    restore_test_status: { type: String, default: "not_tested" },
-    retention_until: Date,
-    checksum_sha256: String,
-    manifest: { type: Object, default: {} },
-    verification_status: { type: String, default: "pending" },
-    verified_by: Number,
-    disaster_recovery_log_id: Number,
     error_message: String,
     requested_by: Number,
     notes: String,
@@ -1407,689 +1156,9 @@ const Notification = makeModel("Notification", "notifications", {
     is_active: { type: Boolean, default: true },
 });
 Notification.schema.index({ hospital_id: 1, created_at: -1 }, { name: "notification_hospital_recent_lookup" });
-
-const CustomerSuccessNote = makeModel("CustomerSuccessNote", "customer_success_notes", {
-    hospital_id: { type: Number, required: true, index: true },
-    title: { type: String, required: true },
-    note: { type: String, default: "" },
-    category: { type: String, default: "general", index: true },
-    priority: { type: String, default: "medium", index: true },
-    status: { type: String, default: "open", index: true },
-    next_follow_up_at: Date,
-    created_by: Number,
-    closed_at: Date,
-});
-CustomerSuccessNote.schema.index({ hospital_id: 1, status: 1, next_follow_up_at: 1 }, { name: "cs_note_followup_lookup" });
-
-const RenewalWorkflow = makeModel("RenewalWorkflow", "renewal_workflows", {
-    hospital_id: { type: Number, required: true, index: true },
-    renewal_date: { type: Date, required: true, index: true },
-    stage: { type: String, default: "upcoming", index: true },
-    owner_id: Number,
-    health_score: { type: Number, default: 75 },
-    risk_level: { type: String, default: "medium", index: true },
-    action_items: { type: [String], default: [] },
-    last_touch_at: Date,
-    notes: String,
-});
-RenewalWorkflow.schema.index({ hospital_id: 1, renewal_date: 1 }, { name: "renewal_hospital_date_lookup" });
-
-const SupportTicket = makeModel("SupportTicket", "support_tickets", {
-    hospital_id: { type: Number, required: true, index: true },
-    ticket_no: { type: String, trim: true, index: true },
-    subject: { type: String, required: true },
-    description: { type: String, default: "" },
-    category: { type: String, default: "general", index: true },
-    priority: { type: String, default: "medium", index: true },
-    status: { type: String, default: "open", index: true },
-    sla_hours: { type: Number, default: 24 },
-    sla_due_at: { type: Date, index: true },
-    escalated: { type: Boolean, default: false, index: true },
-    escalated_at: Date,
-    assigned_to: Number,
-    created_by: Number,
-    last_response_at: Date,
-    closed_at: Date,
-    resolution_notes: String,
-    comments: { type: [Object], default: [] },
-});
-SupportTicket.schema.index({ hospital_id: 1, status: 1, sla_due_at: 1 }, { name: "support_ticket_sla_lookup" });
-SupportTicket.schema.index({ ticket_no: 1 }, { name: "support_ticket_no_lookup", sparse: true });
-
-const TenantRestoreRequest = makeModel("TenantRestoreRequest", "tenant_restore_requests", {
-    hospital_id: { type: Number, required: true, index: true },
-    hospital_code: String,
-    hospital_name: String,
-    tenant_db_name: String,
-    backup_id: { type: Number, index: true },
-    restore_scope: { type: String, default: "full_tenant" },
-    status: { type: String, default: "requested", index: true },
-    priority: { type: String, default: "normal" },
-    requested_by: Number,
-    approved_by: Number,
-    approved_at: Date,
-    scheduled_at: Date,
-    started_at: Date,
-    completed_at: Date,
-    target_environment: { type: String, default: "staging" },
-    dry_run_required: { type: Boolean, default: true },
-    approval_checklist: { type: Object, default: {} },
-    rollback_plan: String,
-    reason: String,
-    notes: String,
-    error_message: String,
-});
-TenantRestoreRequest.schema.index({ hospital_id: 1, status: 1, created_at: -1 }, { name: "tenant_restore_status_lookup" });
-
-const TenantDataExport = makeModel("TenantDataExport", "tenant_data_exports", {
-    hospital_id: { type: Number, required: true, index: true },
-    hospital_code: String,
-    hospital_name: String,
-    export_type: { type: String, default: "tenant_data" },
-    export_format: { type: String, default: "json" },
-    status: { type: String, default: "queued", index: true },
-    requested_by: Number,
-    requested_by_role: String,
-    file_name: String,
-    export_path: String,
-    size_bytes: Number,
-    record_counts: { type: Object, default: {} },
-    checksum_sha256: String,
-    manifest: { type: Object, default: {} },
-    filters: { type: Object, default: {} },
-    expires_at: Date,
-    completed_at: Date,
-    downloaded_at: Date,
-    error_message: String,
-    notes: String,
-});
-TenantDataExport.schema.index({ hospital_id: 1, created_at: -1 }, { name: "tenant_export_recent_lookup" });
-
-const TenantDisasterRecoveryLog = makeModel("TenantDisasterRecoveryLog", "tenant_disaster_recovery_logs", {
-    hospital_id: { type: Number, required: true, index: true },
-    hospital_code: String,
-    hospital_name: String,
-    event_type: { type: String, default: "backup" },
-    status: { type: String, default: "open", index: true },
-    severity: { type: String, default: "info" },
-    related_backup_id: Number,
-    related_restore_request_id: Number,
-    related_export_id: Number,
-    summary: String,
-    details: { type: Object, default: {} },
-    created_by: Number,
-    resolved_by: Number,
-    resolved_at: Date,
-});
-TenantDisasterRecoveryLog.schema.index({ hospital_id: 1, event_type: 1, created_at: -1 }, { name: "tenant_dr_event_lookup" });
-
-const KnowledgeBaseArticle = makeModel("KnowledgeBaseArticle", "knowledge_base_articles", {
-    title: { type: String, required: true, index: true },
-    slug: { type: String, required: true, unique: true, sparse: true, index: true },
-    summary: { type: String, default: "" },
-    body: { type: String, required: true },
-    category: { type: String, default: "general", index: true },
-    audience: { type: String, default: "tenant_admin", index: true },
-    visibility: { type: String, default: "tenant_admin", index: true },
-    status: { type: String, default: "draft", index: true },
-    tags: { type: [String], default: [] },
-    related_ticket_category: String,
-    display_order: { type: Number, default: 0 },
-    view_count: { type: Number, default: 0 },
-    last_viewed_at: Date,
-    created_by: Number,
-    updated_by: Number,
-    published_at: Date,
-});
-KnowledgeBaseArticle.schema.index({ status: 1, visibility: 1, category: 1, display_order: 1 }, { name: "kb_public_lookup" });
-KnowledgeBaseArticle.schema.index({ title: "text", summary: "text", body: "text", tags: "text" }, { name: "kb_text_search" });
-
-const OTBooking = makeModel("OTBooking", "ot_bookings", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: { type: String, index: true },
-    doctor_id: { type: String, index: true },
-    surgeon_team: { type: [Object], default: [] },
-    ot_room: String,
-    surgery_type: String,
-    procedure_name: String,
-    scheduled_date: { type: String, index: true },
-    start_time: String,
-    end_time: String,
-    priority: { type: String, default: "routine" },
-    status: { type: String, default: "scheduled", index: true },
-    diagnosis: String,
-    notes: String,
-    billing_id: Number,
-    created_by: Number,
-    updated_by: Number,
-});
-
-const SurgeryNote = makeModel("SurgeryNote", "surgery_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    ot_booking_id: { type: Number, index: true },
-    patient_id: String,
-    doctor_id: String,
-    pre_op_diagnosis: String,
-    post_op_diagnosis: String,
-    procedure_performed: String,
-    findings: String,
-    complications: String,
-    specimens: String,
-    implants: String,
-    estimated_blood_loss: String,
-    surgery_start_at: Date,
-    surgery_end_at: Date,
-    status: { type: String, default: "draft" },
-    created_by: Number,
-    updated_by: Number,
-});
-
-const AnaesthesiaNote = makeModel("AnaesthesiaNote", "anaesthesia_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    ot_booking_id: { type: Number, index: true },
-    patient_id: String,
-    anaesthetist_id: String,
-    anaesthesia_type: String,
-    asa_grade: String,
-    airway_notes: String,
-    medications: { type: [Object], default: [] },
-    monitoring_notes: String,
-    complications: String,
-    status: { type: String, default: "draft" },
-    created_by: Number,
-    updated_by: Number,
-});
-
-const PostOpNote = makeModel("PostOpNote", "post_op_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    ot_booking_id: { type: Number, index: true },
-    patient_id: String,
-    recovery_status: String,
-    vitals: { type: Object, default: {} },
-    pain_score: Number,
-    post_op_orders: String,
-    follow_up_plan: String,
-    complications: String,
-    created_by: Number,
-    updated_by: Number,
-});
-
-const OTInventoryUsage = makeModel("OTInventoryUsage", "ot_inventory_usages", {
-    hospital_id: { type: Number, default: 1, index: true },
-    ot_booking_id: { type: Number, index: true },
-    item_id: Number,
-    item_name: String,
-    quantity: { type: Number, default: 0 },
-    unit: String,
-    notes: String,
-    created_by: Number,
-});
-
-
-const NursingVital = makeModel("NursingVital", "nursing_vitals", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: String,
-    ipd_admission_id: { type: Number, index: true },
-    recorded_at: { type: Date, default: Date.now, index: true },
-    temperature: Number,
-    pulse: Number,
-    respiratory_rate: Number,
-    blood_pressure_systolic: Number,
-    blood_pressure_diastolic: Number,
-    spo2: Number,
-    pain_score: Number,
-    gcs_score: Number,
-    notes: String,
-    recorded_by: Number,
-    updated_by: Number,
-});
-
-const MedicationAdministration = makeModel("MedicationAdministration", "medication_administrations", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: String,
-    ipd_admission_id: { type: Number, index: true },
-    medication_name: String,
-    dose: String,
-    route: String,
-    frequency: String,
-    scheduled_at: Date,
-    administered_at: Date,
-    status: { type: String, default: "scheduled", index: true },
-    withheld_reason: String,
-    notes: String,
-    administered_by: Number,
-    created_by: Number,
-    updated_by: Number,
-});
-
-const NursingHandoverNote = makeModel("NursingHandoverNote", "nursing_handover_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: String,
-    ipd_admission_id: { type: Number, index: true },
-    shift: String,
-    handover_from: Number,
-    handover_to: Number,
-    situation: String,
-    background: String,
-    assessment: String,
-    recommendation: String,
-    pending_tasks: { type: [Object], default: [] },
-    created_by: Number,
-});
-
-const NursingCarePlan = makeModel("NursingCarePlan", "nursing_care_plans", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: String,
-    ipd_admission_id: { type: Number, index: true },
-    diagnosis: String,
-    goals: { type: [String], default: [] },
-    interventions: { type: [Object], default: [] },
-    evaluation_notes: String,
-    status: { type: String, default: "active", index: true },
-    started_at: Date,
-    reviewed_at: Date,
-    created_by: Number,
-    updated_by: Number,
-});
-
-const NursingShiftTask = makeModel("NursingShiftTask", "nursing_shift_tasks", {
-    hospital_id: { type: Number, default: 1, index: true },
-    patient_id: String,
-    ipd_admission_id: { type: Number, index: true },
-    title: String,
-    task_type: String,
-    priority: { type: String, default: "normal", index: true },
-    due_at: Date,
-    status: { type: String, default: "open", index: true },
-    assigned_to: Number,
-    completed_at: Date,
-    completed_by: Number,
-    notes: String,
-    created_by: Number,
-    updated_by: Number,
-});
-
-
-const EmergencyCase = makeModel("EmergencyCase", "emergency_cases", {
-    hospital_id: { type: Number, default: 1, index: true },
-    emergency_uid: { type: String, trim: true, index: true },
-    patient_id: { type: String, index: true },
-    patient_name: String,
-    age: Number,
-    gender: String,
-    phone: String,
-    arrival_mode: String,
-    arrival_at: { type: Date, default: Date.now, index: true },
-    chief_complaint: String,
-    triage_category: { type: String, default: "green", index: true },
-    triage_score: Number,
-    vitals: { type: Object, default: {} },
-    mlc_required: { type: Boolean, default: false, index: true },
-    mlc_number: String,
-    police_informed: { type: Boolean, default: false },
-    assigned_doctor_id: String,
-    bed_id: Number,
-    status: { type: String, default: "registered", index: true },
-    disposition: String,
-    billing_id: Number,
-    notes: String,
-    created_by: Number,
-    updated_by: Number,
-    closed_at: Date,
-    closed_by: Number,
-});
-EmergencyCase.schema.index({ hospital_id: 1, emergency_uid: 1 }, { unique: true, sparse: true, name: "emergency_hospital_uid_unique" });
-EmergencyCase.schema.index({ hospital_id: 1, status: 1, arrival_at: -1 }, { name: "emergency_status_arrival_lookup" });
-
-const EmergencyTriageNote = makeModel("EmergencyTriageNote", "emergency_triage_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    emergency_case_id: { type: Number, index: true },
-    patient_id: String,
-    triage_category: { type: String, default: "green", index: true },
-    triage_score: Number,
-    vitals: { type: Object, default: {} },
-    red_flags: { type: [String], default: [] },
-    notes: String,
-    recorded_by: Number,
-    recorded_at: { type: Date, default: Date.now, index: true },
-});
-
-const EmergencyClinicalNote = makeModel("EmergencyClinicalNote", "emergency_clinical_notes", {
-    hospital_id: { type: Number, default: 1, index: true },
-    emergency_case_id: { type: Number, index: true },
-    patient_id: String,
-    assessment: String,
-    diagnosis: String,
-    treatment_given: String,
-    orders: { type: [Object], default: [] },
-    follow_up_plan: String,
-    created_by: Number,
-    updated_by: Number,
-});
-
-const EmergencyTransfer = makeModel("EmergencyTransfer", "emergency_transfers", {
-    hospital_id: { type: Number, default: 1, index: true },
-    emergency_case_id: { type: Number, index: true },
-    patient_id: String,
-    transfer_type: { type: String, default: "ipd" },
-    target_department: String,
-    target_bed_id: Number,
-    reason: String,
-    handover_notes: String,
-    status: { type: String, default: "requested", index: true },
-    requested_by: Number,
-    completed_by: Number,
-    completed_at: Date,
-});
-
-
-const BloodDonor = makeModel("BloodDonor", "blood_donors", {
-    hospital_id: { type: Number, default: 1, index: true },
-    donor_uid: { type: String, trim: true, index: true },
-    full_name: { type: String, required: true, index: true },
-    age: Number,
-    gender: String,
-    phone: String,
-    email: String,
-    address: String,
-    blood_group: { type: String, index: true },
-    last_donation_date: Date,
-    next_eligible_date: Date,
-    eligibility_status: { type: String, default: "pending", index: true },
-    screening_status: { type: String, default: "pending", index: true },
-    screening_notes: String,
-    medical_history: String,
-    donor_frequency_count: { type: Number, default: 0 },
-    consent_recorded: { type: Boolean, default: false },
-    status: { type: String, default: "active", index: true },
-    created_by: Number,
-    updated_by: Number,
-});
-BloodDonor.schema.index({ hospital_id: 1, donor_uid: 1 }, { unique: true, sparse: true, name: "blood_donor_hospital_uid_unique" });
-BloodDonor.schema.index({ hospital_id: 1, blood_group: 1, eligibility_status: 1 }, { name: "blood_donor_group_eligibility_lookup" });
-
-const BloodUnit = makeModel("BloodUnit", "blood_units", {
-    hospital_id: { type: Number, default: 1, index: true },
-    unit_uid: { type: String, trim: true, index: true },
-    bag_number: { type: String, trim: true, index: true },
-    donor_id: Number,
-    donor_uid: String,
-    blood_group: { type: String, index: true },
-    component_type: { type: String, default: "whole_blood", index: true },
-    volume_ml: Number,
-    collection_date: Date,
-    expiry_date: { type: Date, index: true },
-    storage_location: String,
-    storage_temperature_c: Number,
-    screening_status: { type: String, default: "pending", index: true },
-    status: { type: String, default: "available", index: true },
-    quarantine_reason: String,
-    reserved_for_patient_id: String,
-    reserved_until: Date,
-    partial_consumed_ml: { type: Number, default: 0 },
-    disposed_at: Date,
-    disposal_reason: String,
-    notes: String,
-    created_by: Number,
-    updated_by: Number,
-});
-BloodUnit.schema.index({ hospital_id: 1, unit_uid: 1 }, { unique: true, sparse: true, name: "blood_unit_hospital_uid_unique" });
-BloodUnit.schema.index({ hospital_id: 1, bag_number: 1 }, { unique: true, sparse: true, name: "blood_unit_hospital_bag_unique" });
-BloodUnit.schema.index({ hospital_id: 1, blood_group: 1, component_type: 1, status: 1 }, { name: "blood_inventory_lookup" });
-BloodUnit.schema.index({ hospital_id: 1, expiry_date: 1, status: 1 }, { name: "blood_expiry_lookup" });
-
-const BloodRequisition = makeModel("BloodRequisition", "blood_requisitions", {
-    hospital_id: { type: Number, default: 1, index: true },
-    requisition_uid: { type: String, trim: true, index: true },
-    patient_id: { type: String, index: true },
-    patient_name: String,
-    patient_blood_group: { type: String, index: true },
-    component_type: { type: String, default: "packed_rbc", index: true },
-    units_requested: { type: Number, default: 1 },
-    priority: { type: String, default: "routine", index: true },
-    indication: String,
-    requested_by_doctor_id: String,
-    request_source: String,
-    status: { type: String, default: "requested", index: true },
-    approved_by: Number,
-    approved_at: Date,
-    rejected_by: Number,
-    rejected_at: Date,
-    rejection_reason: String,
-    notes: String,
-    created_by: Number,
-    updated_by: Number,
-});
-BloodRequisition.schema.index({ hospital_id: 1, requisition_uid: 1 }, { unique: true, sparse: true, name: "blood_requisition_hospital_uid_unique" });
-
-const BloodCrossMatch = makeModel("BloodCrossMatch", "blood_cross_matches", {
-    hospital_id: { type: Number, default: 1, index: true },
-    requisition_id: Number,
-    patient_id: String,
-    patient_name: String,
-    patient_blood_group: { type: String, index: true },
-    unit_id: Number,
-    unit_blood_group: String,
-    component_type: String,
-    request_source: String,
-    requested_by_doctor_id: String,
-    compatibility_result: { type: String, default: "pending", index: true },
-    compatibility_warning: String,
-    test_notes: String,
-    requested_by: Number,
-    tested_by: Number,
-    tested_at: Date,
-    status: { type: String, default: "open", index: true },
-});
-BloodCrossMatch.schema.index({ hospital_id: 1, patient_id: 1, compatibility_result: 1 }, { name: "blood_crossmatch_patient_lookup" });
-
-const BloodIssueRecord = makeModel("BloodIssueRecord", "blood_issue_records", {
-    hospital_id: { type: Number, default: 1, index: true },
-    unit_id: Number,
-    requisition_id: Number,
-    cross_match_id: Number,
-    patient_id: String,
-    patient_name: String,
-    issue_type: { type: String, default: "issue", index: true },
-    emergency_issue: { type: Boolean, default: false, index: true },
-    emergency_reason: String,
-    volume_issued_ml: Number,
-    issued_at: Date,
-    returned_at: Date,
-    discarded_at: Date,
-    status: { type: String, default: "issued", index: true },
-    issued_by: Number,
-    returned_by: Number,
-    discarded_by: Number,
-    notes: String,
-});
-BloodIssueRecord.schema.index({ hospital_id: 1, unit_id: 1, created_at: -1 }, { name: "blood_issue_unit_traceability" });
-
-const BloodReservation = makeModel("BloodReservation", "blood_reservations", {
-    hospital_id: { type: Number, default: 1, index: true },
-    unit_id: { type: Number, index: true },
-    requisition_id: Number,
-    patient_id: { type: String, index: true },
-    patient_name: String,
-    reserved_until: Date,
-    status: { type: String, default: "active", index: true },
-    reserved_by: Number,
-    released_by: Number,
-    released_at: Date,
-    notes: String,
-});
-BloodReservation.schema.index({ hospital_id: 1, unit_id: 1, status: 1 }, { name: "blood_reservation_active_lookup" });
-
-
-const StaffProfile = makeModel("StaffProfile", "staff_profiles", {
-    hospital_id: { type: Number, default: 1, index: true },
-    staff_uid: { type: String, trim: true, index: true },
-    full_name: { type: String, trim: true },
-    email: { type: String, trim: true, index: true },
-    phone: String,
-    role: { type: String, default: "staff", index: true },
-    department_id: { type: Number, index: true },
-    department_name: String,
-    designation: String,
-    employment_type: { type: String, default: "full_time", index: true },
-    joining_date: Date,
-    salary_basic: Number,
-    payroll_code: String,
-    emergency_contact_name: String,
-    emergency_contact_phone: String,
-    address: String,
-    status: { type: String, default: "active", index: true },
-    created_by: Number,
-    updated_by: Number,
-});
-StaffProfile.schema.index({ hospital_id: 1, staff_uid: 1 }, { unique: true, name: "staff_hospital_uid_unique", partialFilterExpression: { staff_uid: { $type: "string" } } });
-
-const StaffAttendance = makeModel("StaffAttendance", "staff_attendance", {
-    hospital_id: { type: Number, default: 1, index: true },
-    staff_id: { type: Number, index: true },
-    staff_name: String,
-    attendance_date: { type: Date, index: true },
-    shift: String,
-    check_in_at: Date,
-    check_out_at: Date,
-    status: { type: String, default: "present", index: true },
-    late_minutes: Number,
-    overtime_minutes: Number,
-    notes: String,
-    marked_by: Number,
-    updated_by: Number,
-});
-StaffAttendance.schema.index({ hospital_id: 1, staff_id: 1, attendance_date: 1 }, { name: "staff_attendance_lookup" });
-
-const StaffShiftRoster = makeModel("StaffShiftRoster", "staff_shift_rosters", {
-    hospital_id: { type: Number, default: 1, index: true },
-    staff_id: { type: Number, index: true },
-    staff_name: String,
-    department_id: { type: Number, index: true },
-    roster_date: { type: Date, index: true },
-    shift_name: String,
-    start_time: String,
-    end_time: String,
-    ward_or_location: String,
-    status: { type: String, default: "scheduled", index: true },
-    assigned_by: Number,
-    updated_by: Number,
-    notes: String,
-});
-StaffShiftRoster.schema.index({ hospital_id: 1, staff_id: 1, roster_date: 1 }, { name: "staff_roster_lookup" });
-
-const StaffLeaveRequest = makeModel("StaffLeaveRequest", "staff_leave_requests", {
-    hospital_id: { type: Number, default: 1, index: true },
-    staff_id: { type: Number, index: true },
-    staff_name: String,
-    leave_type: { type: String, default: "casual", index: true },
-    start_date: Date,
-    end_date: Date,
-    total_days: Number,
-    reason: String,
-    status: { type: String, default: "requested", index: true },
-    requested_by: Number,
-    reviewed_by: Number,
-    reviewed_at: Date,
-    review_notes: String,
-});
-StaffLeaveRequest.schema.index({ hospital_id: 1, staff_id: 1, status: 1 }, { name: "staff_leave_status_lookup" });
-
-const StaffPayrollExport = makeModel("StaffPayrollExport", "staff_payroll_exports", {
-    hospital_id: { type: Number, default: 1, index: true },
-    period_start: Date,
-    period_end: Date,
-    export_uid: { type: String, index: true },
-    status: { type: String, default: "generated", index: true },
-    generated_by: Number,
-    generated_at: Date,
-    staff_count: Number,
-    gross_basic_total: Number,
-    attendance_days_total: Number,
-    leave_days_total: Number,
-    rows: { type: [Object], default: [] },
-    notes: String,
-});
-
-
-const HL7Message = makeModel("HL7Message", "hl7_messages", {
-    hospital_id: { type: Number, default: 1, index: true },
-    message_uid: { type: String, index: true },
-    message_type: { type: String, index: true },
-    trigger_event: String,
-    control_id: { type: String, index: true },
-    direction: { type: String, default: "outbound", index: true },
-    status: { type: String, default: "queued", index: true },
-    patient_id: Number,
-    appointment_id: Number,
-    lab_test_id: Number,
-    source_module: String,
-    endpoint: String,
-    raw_message: String,
-    parsed_payload: { type: Object, default: {} },
-    ack_code: String,
-    ack_message: String,
-    retry_count: { type: Number, default: 0 },
-    max_retries: { type: Number, default: 3 },
-    next_retry_at: Date,
-    last_error: String,
-    queued_at: Date,
-    sent_at: Date,
-    failed_at: Date,
-    processed_at: Date,
-    created_by: Number,
-});
-HL7Message.schema.index({ hospital_id: 1, control_id: 1 }, { name: "hl7_control_lookup" });
-HL7Message.schema.index({ hospital_id: 1, message_type: 1, status: 1 }, { name: "hl7_type_status_lookup" });
-
-const ABDMConsent = makeModel("ABDMConsent", "abdm_consents", {
-    hospital_id: { type: Number, default: 1, index: true },
-    consent_uid: { type: String, index: true },
-    patient_id: { type: String, index: true },
-    patient_ref_id: Number,
-    patient_name: String,
-    abha_masked: String,
-    abha_hash: { type: String, index: true },
-    purpose: String,
-    status: { type: String, default: "requested", index: true },
-    hiu_reference: String,
-    hip_reference: String,
-    consent_artefact_id: { type: String, index: true },
-    care_contexts: { type: [Object], default: [] },
-    requested_at: Date,
-    granted_at: Date,
-    revoked_at: Date,
-    expired_at: Date,
-    expires_at: Date,
-    notes: String,
-    created_by: Number,
-    updated_by: Number,
-});
-ABDMConsent.schema.index({ hospital_id: 1, patient_id: 1, status: 1 }, { name: "abdm_consent_patient_status_lookup" });
-ABDMConsent.schema.index({ hospital_id: 1, consent_uid: 1 }, { name: "abdm_consent_uid_lookup" });
-
-const ABHACareContext = makeModel("ABHACareContext", "abha_care_contexts", {
-    hospital_id: { type: Number, default: 1, index: true },
-    context_uid: { type: String, index: true },
-    patient_id: { type: String, index: true },
-    patient_ref_id: Number,
-    patient_name: String,
-    context_type: { type: String, index: true },
-    reference_id: String,
-    display: String,
-    status: { type: String, default: "linked", index: true },
-    consent_uid: String,
-    linked_at: Date,
-    linked_by: Number,
-    metadata: { type: Object, default: {} },
-});
-ABHACareContext.schema.index({ hospital_id: 1, patient_id: 1, context_type: 1 }, { name: "abha_context_patient_type_lookup" });
-ABHACareContext.schema.index({ hospital_id: 1, context_uid: 1 }, { name: "abha_context_uid_lookup" });
-
 module.exports = {
     Counter,
     User,
-    AuthSession,
     Hospital,
     Department,
     Patient,
@@ -2115,14 +1184,10 @@ module.exports = {
     DynamicField,
     Template,
     Notification,
-    CommunicationTemplate,
-    CommunicationRule,
     SaaSPlan,
     SaaSInvoice,
     SaaSPayment,
-    SaaSSettlement,
     SaaSPaymentIntent,
-    SaaSPaymentWebhook,
     CommunicationLog,
     Supplier,
     InventoryItem,
@@ -2151,39 +1216,4 @@ module.exports = {
     PilotDeployment,
     PilotTask,
     TenantBackup,
-    TenantRestoreRequest,
-    TenantDataExport,
-    TenantDisasterRecoveryLog,
-    CustomerSuccessNote,
-    RenewalWorkflow,
-    SupportTicket,
-    KnowledgeBaseArticle,
-    OTBooking,
-    SurgeryNote,
-    AnaesthesiaNote,
-    PostOpNote,
-    OTInventoryUsage,
-    NursingVital,
-    MedicationAdministration,
-    NursingHandoverNote,
-    NursingCarePlan,
-    NursingShiftTask,
-    EmergencyCase,
-    EmergencyTriageNote,
-    EmergencyClinicalNote,
-    EmergencyTransfer,
-    BloodDonor,
-    BloodUnit,
-    BloodRequisition,
-    BloodCrossMatch,
-    BloodIssueRecord,
-    BloodReservation,
-    StaffProfile,
-    StaffAttendance,
-    StaffShiftRoster,
-    StaffLeaveRequest,
-    StaffPayrollExport,
-    HL7Message,
-    ABDMConsent,
-    ABHACareContext,
 };

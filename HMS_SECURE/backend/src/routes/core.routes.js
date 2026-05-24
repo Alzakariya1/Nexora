@@ -6,8 +6,6 @@ const { attachTenant, tenantFilter, tenantCreateData } = require('../middleware/
 const multer = require('multer');
 const { cloudinary, hasCloudinaryConfig } = require('../config/cloudinary');
 const { createNotification } = require('../utils/notifications');
-const { auditEvent } = require('../utils/audit');
-const { ensureWithinLimit } = require('../utils/subscription');
 
 const router = express.Router();
 const upload = multer({
@@ -38,65 +36,6 @@ async function safelyDestroyCloudinary(publicId, resourceType = 'auto') {
     }
 }
 router.use(verifyToken, attachTenant);
-
-
-const DOCTOR_STATUSES = ['active', 'inactive', 'on_leave', 'archived'];
-function isBlank(value) {
-    return value === undefined || value === null || String(value).trim() === '';
-}
-function normalizeEmail(value = '') {
-    return String(value || '').trim().toLowerCase();
-}
-function normalizePhone(value = '') {
-    return String(value || '').trim().replace(/\s+/g, ' ');
-}
-function validateDoctorPayload(body = {}, { partial = false } = {}) {
-    const errors = [];
-    const cleaned = {};
-    const stringFields = ['doctor_id', 'full_name', 'email', 'phone', 'specialization', 'qualification', 'license_number', 'registration_number', 'status'];
-    stringFields.forEach((field) => {
-        if (Object.prototype.hasOwnProperty.call(body, field)) cleaned[field] = String(body[field] ?? '').trim();
-    });
-    if (Object.prototype.hasOwnProperty.call(body, 'email')) cleaned.email = normalizeEmail(body.email);
-    if (Object.prototype.hasOwnProperty.call(body, 'phone')) cleaned.phone = normalizePhone(body.phone);
-    if (Object.prototype.hasOwnProperty.call(body, 'department_id')) {
-        const n = Number(body.department_id);
-        if (body.department_id === '' || body.department_id === null || body.department_id === undefined) cleaned.department_id = null;
-        else if (!Number.isFinite(n) || n <= 0) errors.push('Department must be a valid department id.');
-        else cleaned.department_id = n;
-    }
-    if (Object.prototype.hasOwnProperty.call(body, 'consultation_fee')) {
-        const n = Number(body.consultation_fee);
-        if (body.consultation_fee === '' || body.consultation_fee === null || body.consultation_fee === undefined) cleaned.consultation_fee = 0;
-        else if (!Number.isFinite(n) || n < 0) errors.push('Consultation fee must be a valid non-negative number.');
-        else cleaned.consultation_fee = n;
-    }
-    if (!partial || Object.prototype.hasOwnProperty.call(body, 'doctor_id')) {
-        if (isBlank(cleaned.doctor_id)) errors.push('Doctor ID is required.');
-    }
-    if (!partial || Object.prototype.hasOwnProperty.call(body, 'full_name')) {
-        if (isBlank(cleaned.full_name)) errors.push('Doctor full name is required.');
-    }
-    if (cleaned.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned.email)) errors.push('Doctor email is invalid.');
-    if (cleaned.phone && !/^[0-9+()\-\s]{7,20}$/.test(cleaned.phone)) errors.push('Doctor phone number is invalid.');
-    if (cleaned.status && !DOCTOR_STATUSES.includes(cleaned.status)) errors.push(`Doctor status must be one of: ${DOCTOR_STATUSES.join(', ')}.`);
-    if (!cleaned.status && !partial) cleaned.status = 'active';
-    return { errors, cleaned };
-}
-async function buildDoctorDuplicateWarnings(req, payload = {}, excludeId = null) {
-    const warnings = [];
-    const andBase = [tenantFilter(req)];
-    if (excludeId !== null && excludeId !== undefined) andBase.push({ id: { $ne: Number(excludeId) } });
-    const checks = [];
-    if (payload.email) checks.push({ label: 'email', query: { email: payload.email } });
-    if (payload.phone) checks.push({ label: 'phone', query: { phone: payload.phone } });
-    for (const check of checks) {
-        const existing = await Doctor.findOne({ $and: [...andBase, check.query] }).lean();
-        if (existing) warnings.push(`Another doctor already uses this ${check.label}: ${existing.full_name || existing.doctor_id || existing.id}`);
-    }
-    return warnings;
-}
-
 
 
 async function validateCustomFields(req, targetModule, customFields = {}) {
@@ -162,9 +101,7 @@ async function withNames(req, rows) {
 }
 
 router.get('/doctors', requirePermission('doctor.view'), asyncHandler(async (req, res) => {
-    const includeArchived = String(req.query.include_archived || '').toLowerCase() === 'true';
-    const baseFilter = includeArchived ? tenantFilter(req) : tenantFilter(req, { status: { $ne: 'archived' }, deleted_at: { $exists: false } });
-    const rows = await Doctor.find(baseFilter).sort({ id: -1 }).lean();
+    const rows = await Doctor.find(tenantFilter(req)).sort({ id: -1 }).lean();
     const deps = await Department.find(tenantFilter(req)).lean();
     const dm = Object.fromEntries(deps.map(d => [d.id, d.department_name]));
     res.json(rows.map(d => ({ ...d, department_name: dm[d.department_id] })));
@@ -199,31 +136,24 @@ router.get('/doctors/:id', requirePermission('doctor.view'), asyncHandler(async 
 }));
 
 router.post('/doctors', requirePermission('doctor.create'), asyncHandler(async (req, res) => {
-    const validation = validateDoctorPayload(req.body);
-    if (validation.errors.length) return res.status(400).json({ message: 'Doctor validation failed', errors: validation.errors });
-
+    const uid = req.body.doctor_uid || `DOC-${Date.now()}`;
     const custom_fields = await validateCustomFields(req, 'doctors', req.body.custom_fields || {});
-    const payload = {
-        ...validation.cleaned,
-        custom_fields,
-        doctor_uid: req.body.doctor_uid || `DOC-${Date.now()}`,
-    };
-
-    const duplicateDoctor = await Doctor.findOne(tenantFilter(req, { doctor_id: payload.doctor_id })).lean();
-    if (duplicateDoctor) {
-        return res.status(409).json({
-            message: `Doctor ID already exists for ${duplicateDoctor.full_name || 'another doctor'}: ${payload.doctor_id}`,
-        });
+    const payload = { ...req.body, custom_fields, doctor_uid: uid, status: req.body.status || 'active' };
+    if (Object.prototype.hasOwnProperty.call(payload, 'doctor_id')) {
+        payload.doctor_id = typeof payload.doctor_id === 'string' ? payload.doctor_id.trim() : payload.doctor_id;
+        if (!payload.doctor_id) delete payload.doctor_id;
     }
-
-    const warnings = await buildDoctorDuplicateWarnings(req, payload);
-
+    if (payload.doctor_id) {
+        const duplicateDoctor = await Doctor.findOne(tenantFilter(req, { doctor_id: payload.doctor_id })).lean();
+        if (duplicateDoctor) {
+            return res.status(409).json({
+                message: `Doctor ID already exists for ${duplicateDoctor.full_name || 'another doctor'}: ${payload.doctor_id}`,
+            });
+        }
+    }
     try {
-        const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'doctors', 1);
-        if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
         const r = await Doctor.create(tenantCreateData(req, payload));
-        await auditEvent({ req, action: 'doctor.created', module_name: 'doctors', entity_type: 'doctor', entity_id: r.id, new_value: r.toJSON?.() || r });
-        res.status(201).json({ message: 'Doctor created', id: r.id, doctor_uid: payload.doctor_uid, warnings, doctor: r.toJSON?.() || r });
+        res.status(201).json({ message: 'Doctor created', id: r.id, doctor_uid: uid, doctor: r.toJSON?.() || r });
     } catch (error) {
         if (error?.code === 11000) {
             return res.status(409).json({ message: 'Doctor ID already exists in this hospital. Please use a different Doctor ID.' });
@@ -234,30 +164,47 @@ router.post('/doctors', requirePermission('doctor.create'), asyncHandler(async (
 
 router.put('/doctors/:id', requirePermission('doctor.edit'), asyncHandler(async (req, res) => {
     const doctorNumericId = Number(req.params.id);
-    if (!Number.isFinite(doctorNumericId)) return res.status(400).json({ message: 'Invalid doctor id' });
-
-    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, status: { $ne: 'archived' } })).lean();
-    if (!existingDoctor) return res.status(404).json({ message: 'Doctor not found' });
-
-    const validation = validateDoctorPayload(req.body, { partial: true });
-    if (validation.errors.length) return res.status(400).json({ message: 'Doctor validation failed', errors: validation.errors });
-
-    const allowed = ['doctor_id', 'full_name', 'email', 'phone', 'specialization', 'qualification', 'consultation_fee', 'department_id', 'status', 'license_number', 'registration_number'];
-    const update = {};
-    allowed.forEach((k) => {
-        if (Object.prototype.hasOwnProperty.call(validation.cleaned, k)) update[k] = validation.cleaned[k];
-    });
-    if ('custom_fields' in req.body) update.custom_fields = await validateCustomFields(req, 'doctors', req.body.custom_fields || {});
-    if (!Object.keys(update).length) return res.status(400).json({ message: 'No valid fields' });
-
-    if (Object.prototype.hasOwnProperty.call(update, 'doctor_id') && update.doctor_id) {
-        const duplicateDoctor = await Doctor.findOne(tenantFilter(req, { doctor_id: update.doctor_id, id: { $ne: doctorNumericId } })).lean();
-        if (duplicateDoctor) {
-            return res.status(409).json({ message: `Doctor ID already exists for ${duplicateDoctor.full_name || 'another doctor'}: ${update.doctor_id}` });
-        }
+    if (!Number.isFinite(doctorNumericId)) {
+        return res.status(400).json({ message: 'Invalid doctor id' });
     }
 
-    const warnings = await buildDoctorDuplicateWarnings(req, update, doctorNumericId);
+    const allowed = [
+        'doctor_id',
+        'full_name',
+        'email',
+        'phone',
+        'specialization',
+        'qualification',
+        'consultation_fee',
+        'department_id',
+        'status',
+        'license_number',
+        'registration_number',
+        'custom_fields',
+    ];
+    const update = {};
+    allowed.forEach(k => {
+        if (k in req.body) update[k] = typeof req.body[k] === 'string' ? req.body[k].trim() : req.body[k];
+    });
+    if ('custom_fields' in req.body) update.custom_fields = await validateCustomFields(req, 'doctors', req.body.custom_fields || {});
+
+    if (!Object.keys(update).length) return res.status(400).json({ message: 'No valid fields' });
+
+    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId })).lean();
+    if (!existingDoctor) return res.status(404).json({ message: 'Doctor not found' });
+
+    if (Object.prototype.hasOwnProperty.call(update, 'doctor_id') && update.doctor_id) {
+        const duplicateDoctor = await Doctor.findOne(tenantFilter(req, {
+            doctor_id: update.doctor_id,
+            id: { $ne: doctorNumericId },
+        })).lean();
+
+        if (duplicateDoctor) {
+            return res.status(409).json({
+                message: `Doctor ID already exists for ${duplicateDoctor.full_name || 'another doctor'}: ${update.doctor_id}`,
+            });
+        }
+    }
 
     try {
         const updated = await Doctor.findOneAndUpdate(
@@ -265,10 +212,13 @@ router.put('/doctors/:id', requirePermission('doctor.edit'), asyncHandler(async 
             { $set: update },
             { new: true, runValidators: true },
         ).lean();
-        await auditEvent({ req, action: 'doctor.updated', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, old_value: existingDoctor, new_value: updated });
-        res.json({ message: 'Doctor updated', warnings, doctor: updated });
+        res.json({ message: 'Doctor updated', doctor: updated });
     } catch (error) {
-        if (error?.code === 11000) return res.status(409).json({ message: 'Doctor ID already exists in this hospital. Please use a different Doctor ID.' });
+        if (error?.code === 11000) {
+            return res.status(409).json({
+                message: 'Doctor ID already exists in this hospital. Please use a different Doctor ID.',
+            });
+        }
         throw error;
     }
 }));
@@ -315,7 +265,6 @@ router.post('/doctors/:id/profile-image', requirePermission('doctor.edit'), uplo
         doctor.profile_image_public_id = profileImagePublicId;
         doctor.profile_image_storage = profileImageStorage;
         await doctor.save();
-        await auditEvent({ req, action: 'doctor.profile_image_uploaded', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, new_value: { profile_image_storage: profileImageStorage } });
 
         res.json({
             message: profileImageStorage === 'cloudinary'
@@ -393,7 +342,6 @@ router.post('/doctors/:id/documents', requirePermission('doctor.document.manage'
         doctor.certificates = doctor.certificates || [];
         doctor.certificates.push(newDoc);
         await doctor.save();
-        await auditEvent({ req, action: 'doctor.document_uploaded', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, new_value: { title: newDoc.title, category: newDoc.category, document_type: newDoc.document_type, storage } });
 
         res.status(201).json({
             message: storage === 'cloudinary' ? 'Doctor document uploaded successfully' : 'Doctor document saved successfully. Cloudinary is not configured, so the file was stored in MongoDB.',
@@ -426,7 +374,6 @@ router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.docu
 
         doctor.certificates.splice(docIndex, 1);
         await doctor.save();
-        await auditEvent({ req, action: 'doctor.document_deleted', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, old_value: { title: doc.title, category: doc.category, document_type: doc.document_type } });
 
         res.json({
             message: 'Doctor document deleted successfully',
@@ -440,19 +387,9 @@ router.delete('/doctors/:id/documents/:docIndex', requirePermission('doctor.docu
 }));
 
 router.delete('/doctors/:id', requirePermission('doctor.delete'), asyncHandler(async (req, res) => {
-    const doctorNumericId = Number(req.params.id);
-    if (!Number.isFinite(doctorNumericId)) return res.status(400).json({ message: 'Invalid doctor id' });
-
-    const existingDoctor = await Doctor.findOne(tenantFilter(req, { id: doctorNumericId, status: { $ne: 'archived' } })).lean();
-    if (!existingDoctor) return res.status(404).json({ message: 'Doctor not found' });
-
-    const updated = await Doctor.findOneAndUpdate(
-        tenantFilter(req, { id: doctorNumericId }),
-        { $set: { status: 'archived', deleted_at: new Date(), deleted_by: req.user?.id || null } },
-        { new: true },
-    ).lean();
-    await auditEvent({ req, action: 'doctor.archived', module_name: 'doctors', entity_type: 'doctor', entity_id: doctorNumericId, old_value: existingDoctor, new_value: { status: 'archived' } });
-    res.json({ message: 'Doctor archived', doctor: updated });
+    const result = await Doctor.deleteOne(tenantFilter(req, { id: Number(req.params.id) }));
+    if (!result.deletedCount) return res.status(404).json({ message: 'Doctor not found' });
+    res.json({ message: 'Doctor deleted' });
 }));
 
 router.get('/departments', requirePermission('dashboard.view'), asyncHandler(async (req, res) => {
@@ -465,9 +402,8 @@ router.post('/departments', requirePermission('doctor.create'), asyncHandler(asy
 }));
 
 
-const APPOINTMENT_STATUSES = ['scheduled', 'checked_in', 'in_consultation', 'completed', 'cancelled', 'no_show', 'archived'];
+const APPOINTMENT_STATUSES = ['scheduled', 'checked_in', 'in_consultation', 'completed', 'cancelled', 'no_show'];
 const APPOINTMENT_TYPES = ['opd', 'follow_up', 'emergency', 'teleconsultation'];
-const ACTIVE_APPOINTMENT_STATUSES = ['scheduled', 'checked_in', 'in_consultation', 'completed'];
 
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_WORKING_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -603,7 +539,7 @@ async function ensureWithinDoctorSchedule(req, payload, currentAppointmentId = n
         const countFilter = tenantFilter(req, {
             doctor_id: String(payload.doctor_id),
             appointment_date: payload.appointment_date,
-            status: { $in: ACTIVE_APPOINTMENT_STATUSES },
+            status: { $nin: ['cancelled', 'no_show'] },
         });
         if (currentAppointmentId) countFilter.id = { $ne: Number(currentAppointmentId) };
         const dayCount = await Appointment.countDocuments(countFilter);
@@ -617,7 +553,7 @@ async function ensureWithinDoctorSchedule(req, payload, currentAppointmentId = n
 
 
 function normalizeAppointmentPayload(body = {}, existing = {}) {
-    const allowed = ['patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'notes', 'appointment_type', 'cancellation_reason', 'no_show_reason', 'reschedule_reason'];
+    const allowed = ['patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'notes', 'appointment_type', 'cancellation_reason'];
     const payload = {};
 
     allowed.forEach((key) => {
@@ -649,14 +585,6 @@ function validateAppointmentPayload(payload, { partial = false } = {}) {
 
     if (payload.status && !APPOINTMENT_STATUSES.includes(payload.status)) {
         return 'Invalid appointment status';
-    }
-
-    if (payload.appointment_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.appointment_date))) {
-        return 'Appointment date must be in YYYY-MM-DD format';
-    }
-
-    if (payload.appointment_time && timeToMinutes(payload.appointment_time) === null) {
-        return 'Appointment time must be a valid HH:mm value';
     }
 
     return null;
@@ -703,7 +631,7 @@ async function ensureDoctorSlotAvailable(req, payload, currentAppointmentId = nu
         doctor_id: String(payload.doctor_id),
         appointment_date: payload.appointment_date,
         appointment_time: payload.appointment_time,
-        status: { $in: ACTIVE_APPOINTMENT_STATUSES },
+        status: { $nin: ['cancelled', 'no_show'] },
     });
 
     if (currentAppointmentId) filter.id = { $ne: Number(currentAppointmentId) };
@@ -717,7 +645,7 @@ async function ensureDoctorSlotAvailable(req, payload, currentAppointmentId = nu
 }
 
 async function generateTokenNumber(req, appointmentDate) {
-    const rows = await Appointment.find(tenantFilter(req, { appointment_date: appointmentDate, status: { $ne: 'archived' } }))
+    const rows = await Appointment.find(tenantFilter(req, { appointment_date: appointmentDate }))
         .select('token_number id')
         .lean();
     const maxToken = rows.reduce((max, row) => {
@@ -811,7 +739,7 @@ router.get('/doctors/:id/slots', requirePermission('appointment.view'), asyncHan
     const bookedRows = await Appointment.find(tenantFilter(req, {
         doctor_id: String(doctor.doctor_id || doctor.id),
         appointment_date: date,
-        status: { $in: ACTIVE_APPOINTMENT_STATUSES },
+        status: { $nin: ['cancelled', 'no_show'] },
     })).lean();
 
     res.json({ doctor, schedule, slots: buildSlots(schedule, date, bookedRows) });
@@ -819,7 +747,7 @@ router.get('/doctors/:id/slots', requirePermission('appointment.view'), asyncHan
 
 router.get('/appointments/queue', requirePermission('appointment.view'), asyncHandler(async (req, res) => {
     const date = String(req.query.date || new Date().toISOString().slice(0, 10));
-    const filter = { appointment_date: date, status: { $ne: 'archived' } };
+    const filter = { appointment_date: date };
     if (req.query.doctor_id && req.query.doctor_id !== 'all') filter.doctor_id = String(req.query.doctor_id);
 
     const rows = await Appointment.find(tenantFilter(req, filter)).sort({ appointment_time: 1, id: 1 });
@@ -862,7 +790,6 @@ router.get('/appointments', requirePermission('appointment.view'), asyncHandler(
     const filter = {};
 
     if (status && status !== 'all') filter.status = String(status).toLowerCase();
-    else filter.status = { $ne: 'archived' };
     if (date) filter.appointment_date = String(date);
     if (doctor_id) filter.doctor_id = String(doctor_id);
     if (patient_id) filter.patient_id = String(patient_id);
@@ -887,9 +814,6 @@ router.post('/appointments', requirePermission('appointment.create'), asyncHandl
     const scheduleError = await ensureWithinDoctorSchedule(req, payload);
     if (scheduleError) return res.status(409).json({ message: scheduleError });
 
-    const limitCheck = await ensureWithinLimit(req.tenant?.hospital_id || req.user?.hospital_id, 'appointments_per_month', 1);
-    if (!limitCheck.ok) return res.status(402).json({ message: limitCheck.message, subscription: limitCheck.subscription });
-
     const token_number = req.body.token_number || await generateTokenNumber(req, payload.appointment_date);
     const r = await Appointment.create(tenantCreateData(req, {
         ...payload,
@@ -907,7 +831,6 @@ router.post('/appointments', requirePermission('appointment.create'), asyncHandl
         entity_id: r.id,
         target_path: '/appointments',
     });
-    await auditEvent({ req, action: 'appointment.created', module_name: 'appointments', entity_type: 'appointment', entity_id: r.id, new_value: r.toJSON?.() || r });
     res.status(201).json({ message: 'Appointment created', id: r.id, appointment_uid: uid, token_number });
 }));
 
@@ -916,19 +839,14 @@ router.patch('/appointments/:id/status', requirePermission('appointment.status.u
     if (!Number.isFinite(appointmentId)) return res.status(400).json({ message: 'Invalid appointment id' });
 
     const status = String(req.body.status || '').toLowerCase();
-    if (!APPOINTMENT_STATUSES.includes(status) || status === 'archived') return res.status(400).json({ message: 'Invalid appointment status' });
+    if (!APPOINTMENT_STATUSES.includes(status)) return res.status(400).json({ message: 'Invalid appointment status' });
 
-    const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId, status: { $ne: 'archived' } })).lean();
+    const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId })).lean();
     if (!existing) return res.status(404).json({ message: 'Appointment not found' });
 
     const update = { status, ...statusTimestampUpdate(status) };
-    if (status === 'cancelled') {
-        const reason = String(req.body.cancellation_reason || '').trim();
-        if (!reason) return res.status(400).json({ message: 'Cancellation reason is required' });
-        update.cancellation_reason = reason;
-    }
-    if (status === 'no_show' && req.body.no_show_reason) {
-        update.no_show_reason = String(req.body.no_show_reason).trim();
+    if (status === 'cancelled' && req.body.cancellation_reason) {
+        update.cancellation_reason = String(req.body.cancellation_reason).trim();
     }
 
     const updated = await Appointment.findOneAndUpdate(
@@ -947,7 +865,6 @@ router.patch('/appointments/:id/status', requirePermission('appointment.status.u
         entity_id: appointmentId,
         target_path: '/appointments',
     });
-    await auditEvent({ req, action: 'appointment.status_updated', module_name: 'appointments', entity_type: 'appointment', entity_id: appointmentId, old_value: { status: existing.status }, new_value: { status, cancellation_reason: update.cancellation_reason, no_show_reason: update.no_show_reason } });
     res.json({ message: 'Appointment status updated', appointment: updated });
 }));
 
@@ -955,7 +872,7 @@ router.put('/appointments/:id', requirePermission('appointment.edit'), asyncHand
     const appointmentId = Number(req.params.id);
     if (!Number.isFinite(appointmentId)) return res.status(400).json({ message: 'Invalid appointment id' });
 
-    const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId, status: { $ne: 'archived' } })).lean();
+    const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId })).lean();
     if (!existing) return res.status(404).json({ message: 'Appointment not found' });
 
     const payload = normalizeAppointmentPayload(req.body, existing);
@@ -973,36 +890,22 @@ router.put('/appointments/:id', requirePermission('appointment.edit'), asyncHand
     if (scheduleError) return res.status(409).json({ message: scheduleError });
 
     const update = { ...payload, ...statusTimestampUpdate(payload.status) };
-    const scheduleChanged = ['doctor_id', 'appointment_date', 'appointment_time'].some((key) => Object.prototype.hasOwnProperty.call(payload, key) && String(payload[key] || '') !== String(existing[key] || ''));
-    if (scheduleChanged) {
-        update.previous_schedule = { doctor_id: existing.doctor_id, appointment_date: existing.appointment_date, appointment_time: existing.appointment_time };
-        update.rescheduled_at = new Date();
-        update.reschedule_reason = String(req.body.reschedule_reason || payload.reschedule_reason || 'Rescheduled from appointment edit').trim();
-    }
     const updated = await Appointment.findOneAndUpdate(
         tenantFilter(req, { id: appointmentId }),
         { $set: update },
         { new: true, runValidators: true },
     ).lean();
 
-    await auditEvent({ req, action: scheduleChanged ? 'appointment.rescheduled' : 'appointment.updated', module_name: 'appointments', entity_type: 'appointment', entity_id: appointmentId, old_value: existing, new_value: updated });
-    res.json({ message: scheduleChanged ? 'Appointment rescheduled' : 'Appointment updated', appointment: updated });
+    res.json({ message: 'Appointment updated', appointment: updated });
 }));
 
 router.delete('/appointments/:id', requirePermission('appointment.delete'), asyncHandler(async (req, res) => {
     const appointmentId = Number(req.params.id);
     if (!Number.isFinite(appointmentId)) return res.status(400).json({ message: 'Invalid appointment id' });
 
-    const existing = await Appointment.findOne(tenantFilter(req, { id: appointmentId, status: { $ne: 'archived' } })).lean();
-    if (!existing) return res.status(404).json({ message: 'Appointment not found' });
-
-    const updated = await Appointment.findOneAndUpdate(
-        tenantFilter(req, { id: appointmentId }),
-        { $set: { status: 'archived', deleted_at: new Date(), deleted_by: req.user?.id || req.user?.user_id || null } },
-        { new: true },
-    ).lean();
-    await auditEvent({ req, action: 'appointment.archived', module_name: 'appointments', entity_type: 'appointment', entity_id: appointmentId, old_value: existing, new_value: { status: 'archived' } });
-    res.json({ message: 'Appointment archived', appointment: updated });
+    const result = await Appointment.deleteOne(tenantFilter(req, { id: appointmentId }));
+    if (!result.deletedCount) return res.status(404).json({ message: 'Appointment not found' });
+    res.json({ message: 'Appointment deleted' });
 }));
 
 router.get('/beds', requirePermission('bed.view'), asyncHandler(async (req, res) => {

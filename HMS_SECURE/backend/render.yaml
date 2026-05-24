@@ -4,9 +4,8 @@ services:
     env: node
     plan: free
     rootDir: backend
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV
         value: production
@@ -20,9 +19,3 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-      - key: API_PUBLIC_URL
-        sync: false
-      - key: RATE_LIMIT_MAX
-        value: 500
-      - key: TRUST_PROXY
-        value: 1

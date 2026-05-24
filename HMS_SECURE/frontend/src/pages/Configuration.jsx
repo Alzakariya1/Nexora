@@ -235,10 +235,9 @@ export default function Configuration({ permissions = {}, onChanged }) {
       {subscription && (
         <div className="subscription-panel">
           <div className="card subscription-current">
-            <span className="doctor-kicker">Tenant Usage Dashboard</span>
+            <span className="doctor-kicker">Current SaaS Plan</span>
             <h2>{subscription.plan_name}</h2>
             <p className="muted">{subscription.description}</p>
-            {subscription.guardrails?.warnings?.length ? <p className="alert warning">{subscription.guardrails.warnings.map(w => `${w.key}: ${w.percent}% used`).join(' · ')}</p> : <p className="muted">Plan guardrails are healthy.</p>}
             <div className="planUsageGrid">
               {Object.entries(subscription.checks || {}).map(([key, value]) => (
                 <div className="usageMeter" key={key}>

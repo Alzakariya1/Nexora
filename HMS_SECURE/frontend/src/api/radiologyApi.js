@@ -7,5 +7,4 @@ export const radiologyApi = {
   uploadReport: (id, payload) => api.patch(`/radiology/upload-report/${id}`, payload),
   saveReport: (id, payload) => api.patch(`/radiology/tests/${id}/report`, payload),
   approve: (id, payload = {}) => api.patch(`/radiology/tests/${id}/approve`, payload),
-  archive: (id, reason) => api.delete(`/radiology/tests/${id}`, { data: { reason } }),
 };

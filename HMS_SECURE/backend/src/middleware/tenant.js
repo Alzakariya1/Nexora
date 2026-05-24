@@ -3,42 +3,21 @@ const { runWithTenantDbName, sanitizeDbName } = require('../config/tenantDb');
 
 const DEFAULT_HOSPITAL_ID = Number(process.env.DEFAULT_HOSPITAL_ID || 1);
 
-function isSuperAdmin(req) {
-  return req.user?.role === 'super_admin';
-}
-
-function validPositiveId(value) {
-  const id = Number(value);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
-
 function resolveHospitalId(req) {
-  const userHospitalId = validPositiveId(req.user?.hospital_id || req.user?.hospitalId);
-  const headerHospitalId = validPositiveId(req.headers['x-hospital-id'] || req.headers['x-tenant-hospital-id']);
-
-  // SaaS safety: regular hospital users must never be able to change tenant context
-  // by spoofing x-hospital-id headers or by sending hospital_id in payloads.
-  if (!isSuperAdmin(req) && userHospitalId) return userHospitalId;
-
-  // Super admins can intentionally switch tenants for support/provisioning screens.
-  if (isSuperAdmin(req) && headerHospitalId) return headerHospitalId;
-
-  if (userHospitalId) return userHospitalId;
+  const headerHospitalId = Number(req.headers['x-hospital-id'] || req.headers['x-tenant-hospital-id']);
+  const userHospitalId = Number(req.user?.hospital_id || req.user?.hospitalId);
+  if (Number.isFinite(headerHospitalId) && headerHospitalId > 0) return headerHospitalId;
+  if (Number.isFinite(userHospitalId) && userHospitalId > 0) return userHospitalId;
   return DEFAULT_HOSPITAL_ID;
 }
 
 async function resolveTenantDatabase(req, hospitalId) {
   const explicitDb = sanitizeDbName(req.headers['x-tenant-db'] || req.headers['x-tenant-db-name']);
   // Only super admins can force a tenant DB from headers for support/backup/tenant-switch use cases.
-  if (explicitDb && isSuperAdmin(req)) return explicitDb;
-
-  const userHospitalId = validPositiveId(req.user?.hospital_id || req.user?.hospitalId);
+  if (explicitDb && req.user?.role === 'super_admin') return explicitDb;
   const tokenDb = sanitizeDbName(req.user?.tenant_db_name || req.user?.db_name);
-
-  // A token database is trusted only for the same hospital encoded in the token.
-  if (tokenDb && userHospitalId && Number(userHospitalId) === Number(hospitalId)) return tokenDb;
-
-  const hospital = await Hospital.findOne({ id: Number(hospitalId), status: { $in: ['active', 'trial'] }, is_deleted: { $ne: true } }).lean();
+  if (tokenDb && Number(req.user?.hospital_id) === Number(hospitalId)) return tokenDb;
+  const hospital = await Hospital.findOne({ id: Number(hospitalId) }).lean();
   return sanitizeDbName(hospital?.tenant_db_name || hospital?.db_name || '');
 }
 
@@ -85,11 +64,9 @@ function tenantFilter(req, extra = {}) {
 }
 
 function tenantCreateData(req, data = {}) {
-  const hospitalId = Number(req.hospital_id || resolveHospitalId(req));
   return {
     ...data,
-    // Never trust client-supplied hospital_id for tenant-scoped creates.
-    hospital_id: hospitalId,
+    hospital_id: Number(data.hospital_id || req.hospital_id || resolveHospitalId(req)),
   };
 }
 
@@ -102,8 +79,6 @@ function withTenantCreate(req, _res, next) {
 
 module.exports = {
   DEFAULT_HOSPITAL_ID,
-  isSuperAdmin,
-  validPositiveId,
   resolveHospitalId,
   resolveTenantDatabase,
   attachTenant,

@@ -15,7 +15,6 @@ function Login({ onLogin }) {
     try {
       const { data } = await authApi.login(form);
       localStorage.setItem("token", data.token);
-      if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
       localStorage.setItem("user", JSON.stringify(data.user));
       onLogin(data.user);
     } catch (err) {

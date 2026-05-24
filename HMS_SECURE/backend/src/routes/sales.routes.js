@@ -1,6 +1,6 @@
 const express = require('express');
 const asyncHandler = require('../utils/asyncHandler');
-const { verifyToken, requirePermission, allowRoles } = require('../middleware/auth');
+const { verifyToken, requirePermission } = require('../middleware/auth');
 const { DemoRequest, SalesActivity, SaaSPlan } = require('../models');
 
 const router = express.Router();
@@ -59,11 +59,11 @@ router.post('/public/demo-requests', asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'Demo request received', id: row.id });
 }));
 
-router.get('/sales/demo-requests', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
+router.get('/sales/demo-requests', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (_req, res) => {
   res.json(await DemoRequest.find().sort({ id: -1 }).limit(200).lean());
 }));
 
-router.patch('/sales/demo-requests/:id', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.patch('/sales/demo-requests/:id', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const allowed = ['status', 'assigned_to', 'notes', 'preferred_demo_date', 'follow_up_at'];
   const update = {};
   for (const key of allowed) if (key in req.body) update[key] = req.body[key];
@@ -71,7 +71,7 @@ router.patch('/sales/demo-requests/:id', verifyToken, allowRoles('super_admin'),
   res.json({ message: 'Demo request updated' });
 }));
 
-router.post('/sales/activities', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
+router.post('/sales/activities', verifyToken, requirePermission('hospital.manage'), asyncHandler(async (req, res) => {
   const activity = await SalesActivity.create({
     demo_request_id: Number(req.body.demo_request_id || 0) || null,
     activity_type: req.body.activity_type || 'note',
@@ -84,7 +84,7 @@ router.post('/sales/activities', verifyToken, allowRoles('super_admin'), require
   res.status(201).json({ message: 'Sales activity saved', id: activity.id });
 }));
 
-router.get('/sales/assets', verifyToken, allowRoles('super_admin'), requirePermission('hospital.manage'), (_req, res) => {
+router.get('/sales/assets', verifyToken, requirePermission('hospital.manage'), (_req, res) => {
   res.json({
     demo_flow: [
       'Create a new patient and upload patient documents',
